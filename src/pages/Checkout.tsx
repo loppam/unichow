@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import Input from '../components/Input';
+import React, { useState } from "react";
+import { ArrowLeft } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import Input from "../components/Input";
 
 export default function Checkout() {
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'bank'>('card');
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "bank">("card");
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const total = queryParams.get('total') || 0; // Retrieve total from URL parameters
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -34,14 +37,14 @@ export default function Checkout() {
           <div className="space-y-2">
             <button
               className={`w-full p-4 rounded-lg border ${
-                paymentMethod === 'card'
-                  ? 'border-gray-800 bg-gray-50'
-                  : 'border-gray-200'
+                paymentMethod === "card"
+                  ? "border-gray-800 bg-gray-50"
+                  : "border-gray-200"
               } flex items-center`}
-              onClick={() => setPaymentMethod('card')}
+              onClick={() => setPaymentMethod("card")}
             >
               <div className="w-6 h-6 rounded-full border-2 border-gray-800 mr-3 flex items-center justify-center">
-                {paymentMethod === 'card' && (
+                {paymentMethod === "card" && (
                   <div className="w-3 h-3 rounded-full bg-gray-800" />
                 )}
               </div>
@@ -49,14 +52,14 @@ export default function Checkout() {
             </button>
             <button
               className={`w-full p-4 rounded-lg border ${
-                paymentMethod === 'bank'
-                  ? 'border-gray-800 bg-gray-50'
-                  : 'border-gray-200'
+                paymentMethod === "bank"
+                  ? "border-gray-800 bg-gray-50"
+                  : "border-gray-200"
               } flex items-center`}
-              onClick={() => setPaymentMethod('bank')}
+              onClick={() => setPaymentMethod("bank")}
             >
               <div className="w-6 h-6 rounded-full border-2 border-gray-800 mr-3 flex items-center justify-center">
-                {paymentMethod === 'bank' && (
+                {paymentMethod === "bank" && (
                   <div className="w-3 h-3 rounded-full bg-gray-800" />
                 )}
               </div>
@@ -68,11 +71,9 @@ export default function Checkout() {
         <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
           <div className="flex justify-between mb-2">
             <span>Total</span>
-            <span className="font-bold">₦3,300</span>
+            <span className="font-bold">₦{total}</span>
           </div>
-          <button className="btn-primary w-full">
-            Proceed to Pay ₦3,300
-          </button>
+          <button className="btn-primary w-full">Proceed to Pay ₦{total}</button>
         </div>
       </main>
     </div>

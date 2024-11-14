@@ -15,7 +15,14 @@ export default function RestaurantCard({ id, name, image, rating, deliveryTime, 
   return (
     <Link to={`/restaurant/${id}`} className="block">
       <div className="rounded-lg overflow-hidden shadow-md bg-white">
-        <img src={image} alt={name} className="w-full h-48 object-cover" />
+        <img
+          src={image || '/default-restaurant.jpg'}
+          alt={name}
+          className="w-full h-48 object-cover"
+          onError={(e) => {
+            e.currentTarget.src = '/default-restaurant.jpg';
+          }}
+        />
         <div className="p-4">
           <h3 className="font-semibold text-lg">{name}</h3>
           <div className="flex items-center mt-2 text-sm text-gray-600">

@@ -3,12 +3,12 @@
   "name": "UniChow Food Delivery",
   "icons": [
     {
-      "src": "whitefavicon192x192.png",
+      "src": "/public/whitefavicon192x192.png",
       "type": "image/png",
       "sizes": "64x64 32x32 24x24 16x16"
     },
     {
-      "src": "whitefavicon512x512.png",
+      "src": "/public/whitefavicon512x512.png",
       "type": "image/png",
       "sizes": "512x512"
     }

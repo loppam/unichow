@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { MenuItem, MenuCategory } from '../../types/menu';
-import { menuService } from '../../services/menuService';
-import { X, Upload } from 'lucide-react';
+import { X } from 'lucide-react';
 
 interface MenuItemModalProps {
   isOpen: boolean;

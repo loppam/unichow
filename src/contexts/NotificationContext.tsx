@@ -1,95 +1,67 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { auth, db } from '../firebase/config';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-
-interface Notification {
-  id: string;
-  type: 'approval' | 'rejection' | 'info';
-  message: string;
-  timestamp: string;
-  read: boolean;
-}
+import { createContext, useContext, useEffect, useState } from 'react';
+import { useAuth } from './AuthContext';
+import { notificationService } from '../services/notificationService';
+import { toast } from 'react-hot-toast';
 
 interface NotificationContextType {
-  notifications: Notification[];
-  unreadCount: number;
-  markAsRead: (notificationId: string) => Promise<void>;
-  markAllAsRead: () => Promise<void>;
+  hasPermission: boolean;
+  requestPermission: () => Promise<void>;
+  isLoading: boolean;
 }
 
-const NotificationContext = createContext<NotificationContextType>({
-  notifications: [],
-  unreadCount: 0,
-  markAsRead: async () => {},
-  markAllAsRead: async () => {},
-});
-
-export function useNotifications() {
-  return useContext(NotificationContext);
-}
+const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [hasPermission, setHasPermission] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(user => {
-      if (user) {
-        const userDoc = doc(db, 'users', user.uid);
-        return onSnapshot(userDoc, (doc) => {
-          if (doc.exists()) {
-            const userData = doc.data();
-            const userNotifications = userData.notifications || [];
-            setNotifications(userNotifications);
-            setUnreadCount(userNotifications.filter((n: Notification) => !n.read).length);
-          }
-        });
-      } else {
-        setNotifications([]);
-        setUnreadCount(0);
-      }
-    });
+    checkPermission();
+    if (user) {
+      notificationService.setupForegroundListener();
+    }
+  }, [user]);
 
-    return () => unsubscribe();
-  }, []);
-
-  const markAsRead = async (notificationId: string) => {
-    if (!auth.currentUser) return;
-
-    const userRef = doc(db, 'users', auth.currentUser.uid);
-    const updatedNotifications = notifications.map(notification => 
-      notification.id === notificationId 
-        ? { ...notification, read: true }
-        : notification
-    );
-
-    await updateDoc(userRef, {
-      notifications: updatedNotifications
-    });
+  const checkPermission = async () => {
+    setIsLoading(true);
+    try {
+      const permission = Notification.permission;
+      setHasPermission(permission === 'granted');
+    } catch (error) {
+      console.error('Error checking notification permission:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const markAllAsRead = async () => {
-    if (!auth.currentUser) return;
+  const requestPermission = async () => {
+    if (!user) {
+      toast.error('Please login to enable notifications');
+      return;
+    }
 
-    const userRef = doc(db, 'users', auth.currentUser.uid);
-    const updatedNotifications = notifications.map(notification => ({
-      ...notification,
-      read: true
-    }));
-
-    await updateDoc(userRef, {
-      notifications: updatedNotifications
-    });
+    try {
+      await notificationService.requestPermission(user.uid);
+      setHasPermission(true);
+      toast.success('Notifications enabled successfully!');
+    } catch (error) {
+      console.error('Error requesting permission:', error);
+      toast.error('Failed to enable notifications');
+    }
   };
 
   return (
-    <NotificationContext.Provider value={{ 
-      notifications, 
-      unreadCount, 
-      markAsRead, 
-      markAllAsRead 
-    }}>
+    <NotificationContext.Provider value={{ hasPermission, requestPermission, isLoading }}>
       {children}
     </NotificationContext.Provider>
   );
+}
+
+export function useNotifications() {
+  const context = useContext(NotificationContext);
+  if (context === undefined) {
+    throw new Error('useNotifications must be used within a NotificationProvider');
+  }
+  return context;
 } 

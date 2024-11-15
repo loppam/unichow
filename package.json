@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "vercel-dev": "vercel dev",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vercel/node": "^3.2.24",
     "algoliasearch": "^5.13.0",
     "chart.js": "^4.4.6",
     "cors": "^2.8.5",
@@ -26,7 +28,8 @@
     "react-hot-toast": "^2.4.1",
     "react-router-dom": "^6.28.0",
     "react-time-picker": "^7.0.0",
-    "sharp": "^0.33.5"
+    "sharp": "^0.33.5",
+    "vercel": "^39.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

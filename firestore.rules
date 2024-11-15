@@ -254,5 +254,16 @@ service cloud.firestore {
         allow write, update: if isAdmin() || isRestaurantOwner(restaurantId);
       }
     }
+
+    // Add FCM token rules
+    match /users/{userId}/fcmTokens/{tokenId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isAdmin() ||
+        isSuperAdmin()
+      );
+      
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
   }
 }

@@ -4,6 +4,7 @@ import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../../firebase/config';
 import toast from 'react-hot-toast';
 import { User, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { testNotification } from '../../utils/testNotification';
 
 type CustomUser = User & {
   firstName?: string;
@@ -196,15 +197,25 @@ export default function AdminSettings() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-medium">Email Notifications</h3>
+                <h3 className="font-medium">Push Notifications</h3>
                 <p className="text-sm text-gray-500">
-                  Receive email notifications for important updates
+                  Receive instant notifications for new orders and updates
                 </p>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-              </label>
+              <button
+                onClick={async () => {
+                  try {
+                    if (!user) return;
+                    await testNotification(user.uid);
+                    toast.success('Test notification sent successfully!');
+                  } catch (error: any) {
+                    toast.error(error?.message || 'Failed to send test notification');
+                  }
+                }}
+                className="px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800"
+              >
+                Test Notifications
+              </button>
             </div>
           </div>
         </div>

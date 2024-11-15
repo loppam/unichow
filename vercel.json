@@ -1,23 +1,25 @@
 {
   "version": 2,
-  "functions": {
-    "api/*.ts": {
-      "memory": 1024,
-      "maxDuration": 10
-    }
-  },
   "routes": [
+    {
+      "src": "/firebase-messaging-sw.js",
+      "headers": {
+        "cache-control": "public, max-age=0, must-revalidate",
+        "Service-Worker-Allowed": "/"
+      },
+      "dest": "/firebase-messaging-sw.js"
+    },
+    {
+      "src": "/manifest.json",
+      "headers": {
+        "content-type": "application/manifest+json",
+        "cache-control": "public, max-age=0, must-revalidate"
+      },
+      "dest": "/manifest.json"
+    },
     {
       "src": "/api/(.*)",
       "dest": "/api/$1"
-    },
-    {
-      "src": "^/assets/(.*)",
-      "dest": "/assets/$1"
-    },
-    {
-      "src": "/(.*\\.(js|css|ico|png|jpg|svg))",
-      "dest": "/$1"
     },
     {
       "src": "/(.*)",

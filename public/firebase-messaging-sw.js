@@ -13,14 +13,22 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 messaging.onBackgroundMessage((payload) => {
   console.log('Received background message:', payload);
-
-  const notificationTitle = payload.notification.title;
+  
+  const notificationTitle = payload.notification?.title || "New Notification";
   const notificationOptions = {
-    body: payload.notification.body,
-    icon: '/logo192.png',
-    badge: '/logo192.png',
+    body: payload.notification?.body,
+    icon: '/whitefavicon192x192.png',
+    badge: '/whitefavicon192x192.png',
     data: payload.data
   };
 

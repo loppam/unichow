@@ -1,6 +1,11 @@
 {
+  "name": "UniChow",
   "short_name": "UniChow",
-  "name": "UniChow Food Delivery",
+  "description": "University Food Delivery Platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
   "icons": [
     {
       "src": "/public/whitefavicon192x192.png",
@@ -12,9 +17,5 @@
       "type": "image/png",
       "sizes": "512x512"
     }
-  ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  ]
 }

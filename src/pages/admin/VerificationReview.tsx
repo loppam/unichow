@@ -1,17 +1,31 @@
 import { useState, useEffect } from 'react';
 import { adminVerificationService } from '../../services/adminVerificationService';
-import AdminLayout from '../../components/AdminLayout';
 import { CheckCircle, XCircle, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'react-hot-toast';
 import { VerificationDocument } from '../../types/verification';
 
+interface Verification {
+  restaurantId: string;
+  restaurantName: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  status: {
+    isVerified: boolean;
+    state?: 'pending' | 'approved' | 'rejected';
+  };
+  documents: VerificationDocument[];
+}
+
 export default function VerificationReview() {
-  const [verifications, setVerifications] = useState<any[]>([]);
+  const [verifications, setVerifications] = useState<Verification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [selectedRestaurant, setSelectedRestaurant] = useState<any | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [reviewing, setReviewing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'approved' | 'pending' | 'rejected'>('all');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     loadVerifications();
@@ -22,7 +36,7 @@ export default function VerificationReview() {
       const data = await adminVerificationService.getPendingVerifications();
       setVerifications(data);
     } catch (err) {
-      setError('Failed to load verifications');
+      toast.error('Failed to load verifications');
       console.error(err);
     } finally {
       setLoading(false);
@@ -43,11 +57,11 @@ export default function VerificationReview() {
         status === 'rejected' ? rejectionReason : undefined
       );
       
-      // Refresh data
       await loadVerifications();
       setRejectionReason('');
+      toast.success(`Document ${status} successfully`);
     } catch (err) {
-      setError('Failed to review document');
+      toast.error('Failed to review document');
       console.error(err);
     } finally {
       setReviewing(false);
@@ -61,184 +75,196 @@ export default function VerificationReview() {
         isVerified
       );
       await loadVerifications();
+      toast.success(`Restaurant ${isVerified ? 'verified' : 'verification revoked'} successfully`);
     } catch (err) {
-      setError('Failed to update verification status');
+      toast.error('Failed to update verification status');
       console.error(err);
     }
   };
 
+  const filteredVerifications = verifications.filter(verification => {
+    if (!verification) return false;
+    
+    if (!verification.status) {
+      verification.status = { 
+        isVerified: false,
+        state: 'pending'
+      };
+    }
+
+    switch (filter) {
+      case 'approved':
+        return verification.status.isVerified;
+      case 'pending':
+        return !verification.status.isVerified && verification.status.state !== 'rejected';
+      case 'rejected':
+        return verification.status.state === 'rejected';
+      default:
+        return true;
+    }
+  });
+
+  const FilterButton = ({ value }: { value: string }) => (
+    <button
+      onClick={() => setFilter(value as any)}
+      className={`px-4 py-2 rounded-lg capitalize transition-colors ${
+        filter === value
+          ? 'bg-black text-white'
+          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+      }`}
+    >
+      {value}
+    </button>
+  );
+
+  const StatusBadge = ({ status }: { status: any }) => {
+    if (!status) return null;
+
+    const getStatus = () => {
+      if (status.isVerified) return 'approved';
+      if (status.state === 'rejected') return 'rejected';
+      return 'pending';
+    };
+
+    const currentStatus = getStatus();
+    
+    const styles = {
+      approved: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+      pending: 'bg-yellow-100 text-yellow-800',
+    }[currentStatus];
+
+    return (
+      <span className={`px-2 py-1 rounded-full text-sm ${styles}`}>
+        {currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}
+      </span>
+    );
+  };
+
+  const RestaurantCard = ({ 
+    verification,
+    isExpanded,
+    onToggleExpand 
+  }: {
+    verification: Verification;
+    isExpanded: boolean;
+    onToggleExpand: () => void;
+  }) => (
+    <div className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <h3 className="text-xl font-semibold">{verification.restaurantName}</h3>
+          <p className="text-sm text-gray-500">{verification.documents.length} documents</p>
+        </div>
+        <StatusBadge status={verification.status} />
+      </div>
+
+      <div className="space-y-2 text-gray-600 mb-4">
+        <p className="flex items-center gap-2">
+          <span className="w-5">📧</span> {verification.email}
+        </p>
+        {verification.phone && (
+          <p className="flex items-center gap-2">
+            <span className="w-5">📱</span> {verification.phone}
+          </p>
+        )}
+        {verification.address && (
+          <p className="flex items-center gap-2">
+            <span className="w-5">📍</span> {verification.address}
+          </p>
+        )}
+      </div>
+
+      {isExpanded && (
+        <div className="mt-4 space-y-4 border-t pt-4">
+          {verification.documents.map(doc => (
+            <div key={doc.id} className="border rounded-lg p-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h4 className="font-medium">{doc.type.replace('_', ' ')}</h4>
+                  <p className="text-sm text-gray-500">
+                    Uploaded {format(new Date(doc.uploadedAt), 'PPp')}
+                  </p>
+                </div>
+                <a
+                  href={doc.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-700"
+                >
+                  View File
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-between items-center mt-4">
+        <button
+          onClick={onToggleExpand}
+          className="text-blue-500 hover:text-blue-700"
+        >
+          {isExpanded ? 'Hide Documents' : 'View Documents'}
+        </button>
+        <button
+          onClick={() => handleVerificationStatus(
+            verification.restaurantId,
+            !verification.status.isVerified
+          )}
+          className={`px-4 py-2 rounded-lg ${
+            verification.status.isVerified
+              ? 'bg-red-500 text-white hover:bg-red-600'
+              : 'bg-green-500 text-white hover:bg-green-600'
+          }`}
+        >
+          {verification.status.isVerified ? 'Revoke Verification' : 'Verify Restaurant'}
+        </button>
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
-      <AdminLayout>
-        <div className="flex justify-center items-center h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-        </div>
-      </AdminLayout>
+      <div className="flex justify-center items-center h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
     );
   }
 
   return (
-    <AdminLayout>
-      <div className="max-w-7xl mx-auto p-6">
-        <h1 className="text-2xl font-semibold mb-6">Verification Review</h1>
-
-        {error && (
-          <div className="bg-red-50 text-red-500 p-4 rounded-lg mb-6">
-            {error}
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+          <h1 className="text-2xl font-semibold mb-4 lg:mb-0">Restaurant Verification</h1>
+          <div className="flex flex-wrap gap-2">
+            {['all', 'approved', 'pending', 'rejected'].map((filterOption) => (
+              <FilterButton key={filterOption} value={filterOption} />
+            ))}
           </div>
-        )}
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           {/* Restaurants List */}
           <div className="space-y-4">
-            <h2 className="text-lg font-medium">Pending Verifications</h2>
-            {verifications.length === 0 ? (
+            <h2 className="text-lg font-medium">Restaurants</h2>
+            {filteredVerifications.length === 0 ? (
               <div className="bg-white p-6 rounded-lg text-center text-gray-500">
-                No pending verifications
+                No restaurants found
               </div>
             ) : (
-              verifications.map(verification => (
-                <div
+              filteredVerifications.map(verification => (
+                <RestaurantCard
                   key={verification.restaurantId}
-                  className={`bg-white p-4 rounded-lg cursor-pointer transition-colors ${
-                    selectedRestaurant?.restaurantId === verification.restaurantId
-                      ? 'ring-2 ring-black'
-                      : 'hover:bg-gray-50'
-                  }`}
-                  onClick={() => setSelectedRestaurant(verification)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-medium">{verification.restaurantName}</h3>
-                      <p className="text-sm text-gray-500">{verification.email}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">
-                        {verification.documents.length} documents
-                      </span>
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        verification.status.isVerified
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {verification.status.isVerified ? 'Verified' : 'Pending'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  verification={verification}
+                  isExpanded={expandedId === verification.restaurantId}
+                  onToggleExpand={() => setExpandedId(prevId => prevId === verification.restaurantId ? null : verification.restaurantId)}
+                />
               ))
             )}
           </div>
-
-          {/* Document Review */}
-          {selectedRestaurant && (
-            <div className="bg-white p-6 rounded-lg">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-lg font-medium">
-                    {selectedRestaurant.restaurantName}
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    {selectedRestaurant.email}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleVerificationStatus(
-                    selectedRestaurant.restaurantId,
-                    !selectedRestaurant.status.isVerified
-                  )}
-                  className={`px-4 py-2 rounded-lg ${
-                    selectedRestaurant.status.isVerified
-                      ? 'bg-red-500 text-white hover:bg-red-600'
-                      : 'bg-green-500 text-white hover:bg-green-600'
-                  }`}
-                >
-                  {selectedRestaurant.status.isVerified
-                    ? 'Revoke Verification'
-                    : 'Verify Restaurant'}
-                </button>
-              </div>
-              <div className="space-y-6">
-                {selectedRestaurant.documents.map((doc: VerificationDocument) => (
-                  <div key={doc.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="font-medium">
-                          {doc.type.replace('_', ' ')}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          Uploaded {format(new Date(doc.uploadedAt), 'PPp')}
-                        </p>
-                      </div>
-                      <a
-                        href={doc.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-blue-500 hover:text-blue-700"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        View
-                      </a>
-                    </div>
-
-                    {doc.status === 'pending' ? (
-                      <div className="space-y-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleReview(
-                              selectedRestaurant.restaurantId,
-                              doc.id,
-                              'approved'
-                            )}
-                            className="flex-1 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 disabled:opacity-50"
-                            disabled={reviewing}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => handleReview(
-                              selectedRestaurant.restaurantId,
-                              doc.id,
-                              'rejected'
-                            )}
-                            className="flex-1 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 disabled:opacity-50"
-                            disabled={reviewing}
-                          >
-                            Reject
-                          </button>
-                        </div>
-                        <textarea
-                          placeholder="Rejection reason (required for rejection)"
-                          value={rejectionReason}
-                          onChange={e => setRejectionReason(e.target.value)}
-                          className="w-full p-2 border rounded-lg"
-                          rows={3}
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        {doc.status === 'approved' ? (
-                          <>
-                            <CheckCircle className="h-5 w-5 text-green-500" />
-                            <span className="text-green-500">Approved</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="h-5 w-5 text-red-500" />
-                            <span className="text-red-500">
-                              Rejected: {doc.rejectionReason ? doc.rejectionReason : 'No reason provided'}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
-    </AdminLayout>
+    </div>
   );
 } 

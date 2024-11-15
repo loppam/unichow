@@ -1,14 +1,43 @@
-import { db } from '../firebase/config';
-import { collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc } from 'firebase/firestore';
+import { db, storage } from '../firebase/config';
+import { collection, doc, setDoc, updateDoc, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { MenuItem, MenuCategory } from '../types/menu';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export const menuService = {
-  async addMenuItem(restaurantId: string, item: Omit<MenuItem, 'id'>): Promise<void> {
-    const menuRef = collection(db, `restaurants/${restaurantId}/menu`);
-    await addDoc(menuRef, {
-      ...item,
-      createdAt: new Date().toISOString()
+  async addMenuItem(restaurantId: string, data: {
+    name: string;
+    description: string;
+    price: number;
+    category: string;
+    image?: File;
+  }) {
+    const menuRef = doc(collection(db, `restaurants/${restaurantId}/menu`));
+    const timestamp = new Date().toISOString();
+
+    // Create menu item first
+    await setDoc(menuRef, {
+      name: data.name,
+      description: data.description,
+      price: data.price,
+      category: data.category,
+      status: 'active',
+      createdAt: timestamp,
+      updatedAt: timestamp
     });
+
+    // Handle image upload if provided
+    if (data.image) {
+      const imageRef = ref(storage, `restaurants/${restaurantId}/menu/${menuRef.id}`);
+      await uploadBytes(imageRef, data.image);
+      const imageUrl = await getDownloadURL(imageRef);
+
+      await updateDoc(menuRef, {
+        imageUrl,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    return menuRef.id;
   },
 
   async updateMenuItem(restaurantId: string, itemId: string, updates: Partial<MenuItem>): Promise<void> {
@@ -41,5 +70,23 @@ export const menuService = {
     const categoriesRef = collection(db, `restaurants/${restaurantId}/categories`);
     const snapshot = await getDocs(categoriesRef);
     return snapshot.docs.map(doc => doc.data() as MenuCategory);
+  },
+
+  async updateMenuItems(restaurantId: string, updates: Array<{
+    id: string;
+    data: Partial<MenuItem>;
+  }>) {
+    const batch = writeBatch(db);
+    const timestamp = new Date().toISOString();
+
+    updates.forEach(({ id, data }) => {
+      const ref = doc(db, `restaurants/${restaurantId}/menu/${id}`);
+      batch.update(ref, {
+        ...data,
+        updatedAt: timestamp
+      });
+    });
+
+    await batch.commit();
   }
 }; 

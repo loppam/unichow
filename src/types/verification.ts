@@ -13,8 +13,6 @@ export interface VerificationDocument {
 
 export interface VerificationStatus {
   isVerified: boolean;
-  documentsSubmitted: boolean;
-  pendingDocuments: string[];
-  rejectedDocuments: string[];
-  lastUpdated: string;
+  pendingDocuments?: string[];
+  state: 'approved' | 'rejected' | 'pending';
 } 

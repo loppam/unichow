@@ -1,152 +1,165 @@
-import { db } from '../firebase/config';
-import { collection, doc, updateDoc, query, where, getDoc, writeBatch, getDocs, runTransaction } from 'firebase/firestore';
+import { auth, db, storage } from '../firebase/config';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { 
+  doc, 
+  setDoc, 
+  updateDoc, 
+  getDoc,
+  writeBatch 
+} from 'firebase/firestore';
+import { 
+  ref, 
+  uploadBytes, 
+  getDownloadURL 
+} from 'firebase/storage';
+import { 
+  RestaurantProfile, 
+  RestaurantRegistrationData, 
+  RestaurantStats 
+} from '../types/restaurant';
 
-// Define interfaces
-interface RestaurantProfile {
-  restaurantName: string;
-  description: string;
-  cuisine: string;
-  address: string;
-  phone: string;
-  email: string;
-  openingHours: string;
-  closingHours: string;
-  minimumOrder: number;
-  logo?: string;
-  bannerImage?: string;
-  updatedAt: string;
-}
-
-interface Restaurant extends RestaurantProfile {
-  id: string;
-  isApproved: boolean;
-  status: 'pending' | 'approved' | 'suspended';
-  rating: number;
-  numberOfReviews: number;
-  createdAt: string;
-}
-
-interface RestaurantFilters {
-  isApproved?: boolean;
-  cuisine?: string;
-  status?: Restaurant['status'];
-}
+// Helper functions for file uploads
+const uploadFile = async (path: string, file: File): Promise<string> => {
+  const fileRef = ref(storage, path);
+  await uploadBytes(fileRef, file);
+  return await getDownloadURL(fileRef);
+};
 
 export const restaurantService = {
-  async updateProfile(restaurantId: string, data: Partial<RestaurantProfile>): Promise<void> {
-    const restaurantRef = doc(db, 'restaurants', restaurantId);
-    await updateDoc(restaurantRef, {
-      ...data,
-      updatedAt: new Date().toISOString()
-    });
-  },
-
-  async getRestaurantProfile(restaurantId: string): Promise<Restaurant> {
-    const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
-    if (!restaurantDoc.exists()) {
-      throw new Error('Restaurant not found');
-    }
-    return { id: restaurantDoc.id, ...restaurantDoc.data() } as Restaurant;
-  },
-
-  async getAllRestaurants(filters?: RestaurantFilters): Promise<Restaurant[]> {
-    let q = query(collection(db, 'restaurants'));
-    const conditions = [];
-    
-    if (filters?.isApproved !== undefined) {
-      conditions.push(where('isApproved', '==', filters.isApproved));
-    }
-    
-    if (filters?.cuisine) {
-      conditions.push(where('cuisine', '==', filters.cuisine));
-    }
-
-    if (filters?.status) {
-      conditions.push(where('status', '==', filters.status));
-    }
-
-    if (conditions.length > 0) {
-      q = query(q, ...conditions);
-    }
-
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Restaurant));
-  },
-
-  async bulkUpdateRestaurants(updates: { id: string; data: Partial<Restaurant> }[]): Promise<void> {
-    const batch = writeBatch(db);
-    
-    updates.forEach(({ id, data }) => {
-      const ref = doc(db, 'restaurants', id);
-      batch.update(ref, {
-        ...data,
-        updatedAt: new Date().toISOString()
-      });
-    });
-
-    await batch.commit();
-  },
-
-  async updateRestaurantRating(restaurantId: string, newRating: number): Promise<void> {
+  async registerRestaurant(data: RestaurantRegistrationData): Promise<string> {
     try {
-      await runTransaction(db, async (transaction) => {
-        const restaurantRef = doc(db, 'restaurants', restaurantId);
-        const restaurantDoc = await transaction.get(restaurantRef);
+      // 1. Create Firebase Auth account
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        data.email,
+        data.password
+      );
+      const { uid } = userCredential.user;
 
-        if (!restaurantDoc.exists()) {
-          throw new Error('Restaurant not found');
-        }
+      // 2. Create initial documents (parallel operations)
+      const timestamp = new Date().toISOString();
+      
+      await Promise.all([
+        // Create user document
+        setDoc(doc(db, 'users', uid), {
+          email: data.email,
+          userType: 'restaurant',
+          restaurantName: data.restaurantName,
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }),
 
-        const data = restaurantDoc.data();
-        const currentRating = data.rating || 0;
-        const numRatings = data.numRatings || 0;
-
-        // Calculate new average rating
-        const updatedRating = (currentRating * numRatings + newRating) / (numRatings + 1);
-
-        transaction.update(restaurantRef, {
-          rating: updatedRating,
-          numRatings: numRatings + 1,
-          lastRatingUpdate: new Date().toISOString()
-        });
-      });
-    } catch (error) {
-      console.error('Error updating restaurant rating:', error);
-      throw error;
-    }
-  },
-
-  async syncRestaurantData(userId: string): Promise<void> {
-    try {
-      const userRef = doc(db, 'users', userId);
-      const restaurantRef = doc(db, 'restaurants', userId);
-
-      const [userDoc, restaurantDoc] = await Promise.all([
-        getDoc(userRef),
-        getDoc(restaurantRef)
+        // Create restaurant document
+        setDoc(doc(db, 'restaurants', uid), {
+          restaurantName: data.restaurantName,
+          email: data.email,
+          phone: data.phone,
+          address: data.address,
+          description: data.description || '',
+          cuisine: data.cuisine || [],
+          openingHours: data.openingHours || '',
+          closingHours: data.closingHours || '',
+          status: 'pending',
+          isApproved: false,
+          rating: 0,
+          totalOrders: 0,
+          minimumOrder: 0,
+          profileComplete: false,
+          createdAt: timestamp,
+          updatedAt: timestamp
+        } as RestaurantProfile)
       ]);
 
-      if (!userDoc.exists()) {
-        throw new Error('User not found');
+      // 3. Handle logo upload separately (non-blocking)
+      if (data.logo) {
+        const logoUrl = await uploadFile(
+          `restaurants/${uid}/logo`,
+          data.logo
+        );
+        await updateDoc(doc(db, 'restaurants', uid), { logo: logoUrl });
       }
 
-      const userData = userDoc.data();
-      
-      // Update or create restaurant document
-      await updateDoc(restaurantRef, {
-        email: userData.email,
-        restaurantName: userData.restaurantName || '',
-        phone: userData.phone || '',
-        address: userData.address || '',
-        lastSync: new Date().toISOString(),
-        // Add any other fields you want to sync
-      });
+      return uid;
     } catch (error) {
-      console.error('Error syncing restaurant data:', error);
+      console.error('Error registering restaurant:', error);
       throw error;
     }
+  },
+
+  async getRestaurantProfile(restaurantId: string): Promise<RestaurantProfile | null> {
+    try {
+      const restaurantRef = doc(db, 'restaurants', restaurantId);
+      const restaurantDoc = await getDoc(restaurantRef);
+      
+      if (!restaurantDoc.exists()) return null;
+      return restaurantDoc.data() as RestaurantProfile;
+    } catch (error) {
+      console.error('Error fetching restaurant profile:', error);
+      throw error;
+    }
+  },
+
+  async updateProfile(
+    restaurantId: string,
+    data: Partial<RestaurantProfile>,
+    files?: { logo?: File; banner?: File }
+  ): Promise<void> {
+    try {
+      const batch = writeBatch(db);
+      const updates: Partial<RestaurantProfile> = {
+        ...data,
+        updatedAt: new Date().toISOString()
+      };
+
+      // Handle file uploads if provided
+      if (files?.logo) {
+        const logoUrl = await this.uploadFile(restaurantId, files.logo, 'logo');
+        updates.logo = logoUrl;
+      }
+
+      if (files?.banner) {
+        const bannerUrl = await this.uploadFile(restaurantId, files.banner, 'banner');
+        updates.bannerImage = bannerUrl;
+      }
+
+      // Update restaurant document
+      batch.update(doc(db, 'restaurants', restaurantId), updates);
+
+      // Update user document with basic info
+      batch.update(doc(db, 'users', restaurantId), {
+        restaurantName: updates.restaurantName,
+        phone: updates.phone,
+        updatedAt: updates.updatedAt
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error('Error updating restaurant profile:', error);
+      throw error;
+    }
+  },
+
+  uploadFile(restaurantId: string, file: File, type: 'logo' | 'banner'): Promise<string> {
+    const storageRef = ref(storage, `restaurants/${restaurantId}/${type}/${file.name}`);
+    return uploadBytes(storageRef, file)
+      .then(() => getDownloadURL(storageRef));
+  },
+
+  async getRestaurantStats(restaurantId: string): Promise<RestaurantStats> {
+    const restaurantRef = doc(db, 'restaurants', restaurantId);
+    const statsDoc = await getDoc(restaurantRef);
+    
+    if (!statsDoc.exists()) {
+      throw new Error('Restaurant not found');
+    }
+
+    const data = statsDoc.data();
+    return {
+      totalOrders: data.totalOrders || 0,
+      rating: data.rating || 0,
+      totalRevenue: data.totalRevenue || 0,
+      averageOrderValue: data.averageOrderValue || 0,
+      completionRate: data.completionRate || 0
+    };
   }
 };

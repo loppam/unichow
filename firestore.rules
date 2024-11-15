@@ -18,168 +18,232 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin'
       );
     }
-    
-    function isValidUserData(data) {
-      return data.keys().hasAll([
-        'email', 
-        'firstName', 
-        'lastName', 
-        'userType'
-      ]) &&
-      data.email is string && 
-      data.email.matches('^[^@]+@[^@]+\\.[^@]+$') &&  // Basic email validation
-      data.firstName is string && 
-      data.firstName.size() > 0 &&
-      data.lastName is string && 
-      data.lastName.size() > 0 &&
-      data.userType in ['admin', 'user', 'restaurant'] &&
-      (data.phone == null || (data.phone is string && data.phone.matches('^\\+?[1-9]\\d{1,14}$'))) &&
-      (data.address == null || (data.address is string && data.address.size() > 0)) &&
-      (data.role == null || data.role in ['superadmin', 'admin', 'user']) &&
-      (data.isAdmin == null || data.isAdmin is bool) &&
-      (data.status == null || data.status in ['active', 'suspended', 'inactive']) &&
-      (data.permissions == null || (data.permissions is list && data.permissions.size() <= 20));
+
+    function isRestaurantOwner(restaurantId) {
+      return isAuthenticated() && 
+        request.auth.uid == restaurantId &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'restaurant';
     }
 
-    function isValidAdminData(data) {
-      return isValidUserData(data) &&
-        data.userType == 'admin' &&
-        data.role in ['admin', 'superadmin'] &&
-        data.isAdmin == true &&
-        data.status in ['active', 'suspended', 'inactive'] &&
-        data.permissions is list &&
-        data.createdAt is string &&
-        data.lastUpdated is string;
+    function isCustomer() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'customer';
     }
 
     function hasValidTimestamps(data) {
       return data.createdAt is string &&
-             data.createdAt.matches('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$') &&
-             data.lastUpdated is string &&
-             data.lastUpdated.matches('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$');
+             data.lastUpdated is string;
+    }
+
+    function isValidReview() {
+      return request.resource.data.keys().hasAll(['rating', 'comment']) &&
+        request.resource.data.rating is number &&
+        request.resource.data.rating >= 1 &&
+        request.resource.data.rating <= 5 &&
+        request.resource.data.comment is string;
+    }
+
+    function isValidRestaurantData() {
+      return request.resource.data.keys().hasAll(['restaurantName', 'email', 'phone']) &&
+        request.resource.data.restaurantName is string &&
+        request.resource.data.email is string &&
+        request.resource.data.phone is string;
     }
 
     // Users collection
     match /users/{userId} {
-      // Allow read if user is accessing their own data or is an admin
       allow read: if isAuthenticated() && (
         request.auth.uid == userId ||
-        isAdmin()
+        isAdmin() ||
+        isSuperAdmin()
       );
-
-      // Allow create for regular users or superadmins creating admins
-      allow create: if isAuthenticated() && (
-        (isValidUserData(request.resource.data) && !request.resource.data.isAdmin) ||
-        (isValidAdminData(request.resource.data) && isSuperAdmin() && hasValidTimestamps(request.resource.data))
-      );
-
-      // Allow updates based on role and permissions
-      allow update: if isAuthenticated() && (
-        // Users can update their own non-admin data
-        (request.auth.uid == userId && 
-         !request.resource.data.isAdmin && 
-         !request.resource.data.diff(resource.data).affectedKeys()
-           .hasAny(['role', 'isAdmin', 'permissions', 'createdAt'])) ||
-        // Admins can update user data but not roles or admin status
-        (isAdmin() && 
-         !request.resource.data.diff(resource.data).affectedKeys()
-           .hasAny(['role', 'isAdmin', 'createdAt']) &&
-         hasValidTimestamps(request.resource.data)) ||
-        // SuperAdmins can update everything except creation timestamp
-        (isSuperAdmin() &&
-         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdAt']) &&
-         hasValidTimestamps(request.resource.data))
-      );
-
-      // Only superadmins can delete users
+      
+      // Allow superadmin to create admin users
+      allow create: if 
+        (isSuperAdmin() && 
+        request.resource.data.keys().hasAll(['email', 'firstName', 'lastName', 'phone', 'role', 'isAdmin']) &&
+        request.resource.data.role in ['admin', 'superadmin']) || 
+        (
+          request.auth != null && 
+          (
+            request.auth.uid == userId || 
+            (
+              isSuperAdmin() && 
+              exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            )
+          )
+        );
+      
+      allow update: if 
+        isSuperAdmin() || 
+        (isAuthenticated() && request.auth.uid == userId && (
+          // Allow users to update their own basic info
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['emailVerified', 'lastUpdated']) ||
+          // Or allow full updates if they're the owner
+          request.auth.uid == userId
+        ));
+        
       allow delete: if isSuperAdmin();
     }
 
-    // Audit logs for admin actions
-    match /audit_logs/{logId} {
-      allow read: if isAdmin();
-      allow create: if isAuthenticated() && (
-        isAdmin() ||
-        isSuperAdmin()
-      ) && request.resource.data.keys().hasAll([
-        'action',
-        'performedBy',
-        'timestamp',
-        'details'
-      ]) && hasValidTimestamps(request.resource.data);
-      allow update, delete: if false; // Audit logs should be immutable
-    }
-
-    // System settings accessible only by superadmins
-    match /system_settings/{settingId} {
-      allow read: if isAdmin();
-      allow write: if isSuperAdmin() && hasValidTimestamps(request.resource.data);
-    }
-
-    // Rest of your collections...
+    // Restaurants collection
     match /restaurants/{restaurantId} {
       allow read: if true;
-      allow create: if isAuthenticated() && hasValidTimestamps(request.resource.data);
+      allow create: if isRestaurantOwner(restaurantId) && isValidRestaurantData();
       allow update: if isAuthenticated() && (
-        request.auth.uid == restaurantId || 
+        isRestaurantOwner(restaurantId) ||
         isAdmin()
-      ) && hasValidTimestamps(request.resource.data);
-      allow delete: if isAdmin();
+      );
+      allow delete: if isSuperAdmin();
 
-      match /ratings/{ratingId} {
-        allow read: if true;
-        allow create: if isAuthenticated() && hasValidTimestamps(request.resource.data);
-        allow update: if isAdmin() && hasValidTimestamps(request.resource.data);
-        allow delete: if isAdmin();
-      }
-
+      // Menu subcollection
       match /menu/{itemId} {
         allow read: if true;
-        allow write: if (request.auth.uid == restaurantId || isAdmin()) && 
-          hasValidTimestamps(request.resource.data);
+        allow write: if isAuthenticated() && (
+          isRestaurantOwner(restaurantId) ||
+          isAdmin()
+        );
+      }
+
+      // Reviews subcollection
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isCustomer() && 
+          exists(/databases/$(database)/documents/orders/{orderId}) &&
+          get(/databases/$(database)/documents/orders/{orderId}).data.customerId == request.auth.uid &&
+          get(/databases/$(database)/documents/orders/{orderId}).data.restaurantId == restaurantId &&
+          isValidReview();
+        allow update, delete: if isAdmin();
+      }
+      
+      // Verification subcollection
+      match /verification/{verificationDoc} {
+        allow read: if isAuthenticated() && (
+          isRestaurantOwner(restaurantId) ||
+          isAdmin()
+        );
+        allow create: if isRestaurantOwner(restaurantId);
+        allow update: if isAdmin() || (
+          isRestaurantOwner(restaurantId) && 
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'lastUpdated'])
+        );
+        allow delete: if isAdmin();
+
+        // Allow status document operations
+        match /status {
+          allow read: if isAuthenticated() && (
+            isRestaurantOwner(restaurantId) ||
+            isAdmin()
+          );
+          allow write: if isAdmin();
+        }
       }
     }
 
+    // Orders collection
     match /orders/{orderId} {
       allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.userId ||
+        request.auth.uid == resource.data.customerId ||
         request.auth.uid == resource.data.restaurantId ||
         isAdmin()
       );
-      allow create: if isAuthenticated() && hasValidTimestamps(request.resource.data);
+      allow create: if isAuthenticated() && 
+        request.auth.uid == request.resource.data.customerId &&
+        hasValidTimestamps(request.resource.data);
       allow update: if isAuthenticated() && (
         request.auth.uid == resource.data.restaurantId ||
         isAdmin()
-      ) && hasValidTimestamps(request.resource.data);
-      allow delete: if isAdmin();
-    }
-
-    match /system_errors/{errorId} {
-      allow read: if isAdmin();
-      allow create: if isAuthenticated() && hasValidTimestamps(request.resource.data);
-      allow update, delete: if isAdmin();
-    }
-
-    match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.userId ||
-        isAdmin()
       );
-      allow create: if isAdmin() && hasValidTimestamps(request.resource.data);
-      allow update: if isAuthenticated() && 
-        request.auth.uid == resource.data.userId &&
-        hasValidTimestamps(request.resource.data);
       allow delete: if isAdmin();
     }
 
+    // System collections (admin only)
+    match /{path=**}/system_errors/{docId} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /{path=**}/audit_logs/{docId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // Root-level verification documents
     match /verification/{docId} {
       allow read: if isAuthenticated() && (
         request.auth.uid == resource.data.restaurantId ||
         isAdmin()
       );
-      allow create: if isAuthenticated() && hasValidTimestamps(request.resource.data);
-      allow update: if isAdmin() && hasValidTimestamps(request.resource.data);
+      allow create: if isRestaurantOwner(request.resource.data.restaurantId);
+      allow update: if isAdmin() || (
+        isRestaurantOwner(resource.data.restaurantId) && 
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'lastUpdated'])
+      );
       allow delete: if isAdmin();
+    }
+
+    // Customer favorites subcollection
+    match /customers/{customerId}/favorites/{restaurantId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == customerId ||
+        isAdmin()
+      );
+      allow write: if isAuthenticated() && request.auth.uid == customerId;
+    }
+
+    // Admin Settings Collection
+    match /admin/settings {
+      allow read: if isAdmin();
+      allow write: if isSuperAdmin();
+      
+      match /{document=**} {
+        allow read: if isAdmin();
+        allow write: if isSuperAdmin();
+      }
+    }
+
+    // Admin Analytics Collection
+    match /admin/analytics {
+      allow read: if isSuperAdmin();
+      allow write: if false;  // Analytics should only be written by system
+      
+      match /metrics/{metricId} {
+        allow read: if isSuperAdmin();
+        allow write: if false;
+      }
+      
+      match /daily/{date} {
+        allow read: if isSuperAdmin();
+        allow write: if false;
+      }
+      
+      match /restaurants/{restaurantId} {
+        allow read: if isSuperAdmin();
+        allow write: if false;
+      }
+    }
+
+    // Restaurant verification subcollection
+    match /restaurants/{restaurantId}/verification/{verificationDoc} {
+      allow read: if isAuthenticated() && (
+        isRestaurantOwner(restaurantId) ||
+        isAdmin()
+      );
+      allow create: if isRestaurantOwner(restaurantId);
+      allow update, write: if isAdmin() || isRestaurantOwner(restaurantId);
+      allow delete: if isAdmin();
+
+      // Allow status document operations
+      match /status {
+        allow read: if isAuthenticated() && (
+          isRestaurantOwner(restaurantId) ||
+          isAdmin()
+        );
+        allow write, update: if isAdmin() || isRestaurantOwner(restaurantId);
+      }
     }
   }
 }

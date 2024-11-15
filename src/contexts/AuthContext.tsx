@@ -1,28 +1,76 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
+import { User as FirebaseUser, onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  isVerified: boolean;
-  isSuperAdmin: boolean;
+interface User {
+  uid: string;
+  email: string | null;
+  // ... other user properties
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
-  isVerified: false,
-  isSuperAdmin: false,
-});
+type CustomUser = User & {
+  firstName?: string;
+  lastName?: string;
+  emailVerified: boolean;
+};
+
+interface AuthContextType {
+  user: CustomUser | null;
+  loading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  isSuperAdmin: boolean;
+  // ... other auth methods
+}
+
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function useAuth(): { user: CustomUser | null; loading: boolean; signIn: (email: string, password: string) => Promise<void>; signOut: () => Promise<void>; isSuperAdmin: boolean; } {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isVerified, setIsVerified] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  const signIn = async (email: string, password: string): Promise<void> => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Update last login
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        lastLogin: new Date().toISOString()
+      }, { merge: true });
+      
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('auth/invalid-credential')) {
+          throw new Error('Invalid email or password');
+        } else if (error.message.includes('auth/too-many-requests')) {
+          throw new Error('Too many failed attempts. Please try again later');
+        }
+        throw error;
+      }
+      throw new Error('An unexpected error occurred');
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await auth.signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+      throw new Error('Failed to sign out');
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -57,10 +105,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  const value = {
-    user,
+  const value: AuthContextType = {
+    user: user ? {
+      uid: user.uid,
+      email: user.email,
+      emailVerified: user.emailVerified,
+    } : null,
     loading,
-    isVerified,
+    signIn,
+    signOut,
     isSuperAdmin,
   };
 
@@ -70,5 +123,3 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     </AuthContext.Provider>
   );
 }
-
-export const useAuth = () => useContext(AuthContext);

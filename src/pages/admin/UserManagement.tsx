@@ -1,14 +1,11 @@
-import { useState, useEffect } from 'react';
-import AdminLayout from '../../components/AdminLayout';
-import { Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
-import { PERMISSIONS } from '../../types/permissions';
-import PermissionGuard from '../../components/auth/PermissionGuard';
-import { ROLES, UserRole } from '../../constants/roles';
-import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../firebase/config';
-import { useNavigate } from 'react-router-dom';
-
+import { useState, useEffect } from "react";
+import { Trash2 } from "lucide-react";
+import { format } from "date-fns";
+import { ROLES, UserRole } from "../../constants/roles";
+import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
+import { db } from "../../firebase/config";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
 interface AdminUser {
   id: string;
   email: string;
@@ -22,9 +19,9 @@ interface AdminUser {
 export default function UserManagement() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const navigate = useNavigate();
-
+  const { isSuperAdmin } = useAuth();
   useEffect(() => {
     loadUsers();
   }, []);
@@ -32,18 +29,18 @@ export default function UserManagement() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      setError('');
-      const usersRef = collection(db, 'users');
+      setError("");
+      const usersRef = collection(db, "users");
       const snapshot = await getDocs(usersRef);
       const adminUsers = snapshot.docs
-        .filter(doc => doc.data().isAdmin)
-        .map(doc => ({
+        .filter((doc) => doc.data().isAdmin)
+        .map((doc) => ({
           id: doc.id,
-          ...doc.data()
+          ...doc.data(),
         })) as AdminUser[];
       setUsers(adminUsers);
     } catch (err) {
-      setError('Failed to load users');
+      setError("Failed to load users");
       console.error(err);
     } finally {
       setLoading(false);
@@ -51,117 +48,108 @@ export default function UserManagement() {
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
 
     try {
-      const userRef = doc(db, 'users', userId);
+      const userRef = doc(db, "users", userId);
       await deleteDoc(userRef);
-      setUsers(prev => prev.filter(user => user.id !== userId));
+      setUsers((prev) => prev.filter((user) => user.id !== userId));
     } catch (err: any) {
-      setError(err.message || 'Failed to delete user');
+      setError(err.message || "Failed to delete user");
       console.error(err);
     }
   };
 
   if (loading) {
     return (
-      <AdminLayout>
-        <div className="flex justify-center items-center h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-        </div>
-      </AdminLayout>
+      <div className="flex justify-center items-center h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
     );
   }
 
   return (
-    <AdminLayout>
-      <PermissionGuard
-        permissions={[PERMISSIONS.MANAGE_USERS]}
-        fallback={
-          <div className="p-6 text-center text-red-500">
-            Only Super Admins can access this page.
-          </div>
-        }
-      >
-        <div className="max-w-7xl mx-auto p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-semibold">Admin Users</h1>
-            <button
-              onClick={() => navigate('/admin/create')}
-              className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800"
-            >
-              Create New Admin
-            </button>
-          </div>
+    <div className="max-w-7xl mx-auto p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-semibold">Admin Users</h1>
+        <button
+          onClick={() => navigate("/admin/users/create")}
+          className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800"
+        >
+          Create New Admin
+        </button>
+      </div>
 
-          {error && (
-            <div className="bg-red-50 text-red-500 p-4 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
-
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    User
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Last Login
-                  </th>
-                  <th className="px-6 py-3 relative">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {users.map(user => (
-                  <tr key={user.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="font-medium">{user.firstName} {user.lastName}</div>
-                        <div className="text-sm text-gray-500">{user.email}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100">
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-500">
-                        {format(new Date(user.createdAt), 'MM/dd/yyyy')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-500">
-                        {user.lastLogin ? format(new Date(user.lastLogin), 'MM/dd/yyyy') : 'N/A'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      {user.role !== ROLES.SUPERADMIN && (
-                        <button
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {error && (
+        <div className="bg-red-50 text-red-500 p-4 rounded-lg mb-6">
+          {error}
         </div>
-      </PermissionGuard>
-    </AdminLayout>
+      )}
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                User
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Role
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Created
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Last Login
+              </th>
+              <th className="px-6 py-3 relative">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {users.map((user) => (
+              <tr key={user.id}>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div>
+                    <div className="font-medium">
+                      {user.firstName} {user.lastName}
+                    </div>
+                    <div className="text-sm text-gray-500">{user.email}</div>
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100">
+                    {user.role}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="text-sm text-gray-500">
+                    {format(new Date(user.createdAt), "MM/dd/yyyy")}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="text-sm text-gray-500">
+                    {user.lastLogin
+                      ? format(new Date(user.lastLogin), "MM/dd/yyyy")
+                      : "N/A"}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  {isSuperAdmin && user.email !== "lolade132@gmail.com" && (
+                    <button
+                      onClick={() => handleDeleteUser(user.id)}
+                      className="text-red-600 hover:text-red-900"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

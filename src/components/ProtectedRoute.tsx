@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useEffect, useState } from 'react';
+import { User } from 'firebase/auth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -44,10 +45,10 @@ export default function ProtectedRoute({
 
         // Check for admin first
         if (userData.isAdmin === true || userData.isAdmin === "true") {
-          const token = await user.getIdTokenResult();
+          const token = await (user as User).getIdTokenResult();
           if (!token.claims.admin) {
             // Refresh token to get updated claims
-            await user.getIdToken(true);
+            await (user as User).getIdToken(true);
           }
           if (userType !== 'admin') {
             navigate('/admin', { replace: true });
@@ -61,16 +62,21 @@ export default function ProtectedRoute({
           }
         }
 
-        // Handle email verification
-        if (requireVerification && !user.emailVerified) {
-          navigate(userType === 'restaurant' ? '/restaurant-verify-email' : '/verify-email', { replace: true });
+        // Check email verification using Firestore data
+        if (requireVerification && !userData.emailVerified) {
+          navigate(
+            userData.userType === 'restaurant' 
+              ? '/restaurant-verify-email' 
+              : '/verify-email', 
+            { replace: true }
+          );
           return;
         }
 
         // Handle restaurant approval
         if (userType === 'restaurant' && !userData.isApproved) {
           // Only redirect to pending if email is verified
-          if (user.emailVerified) {
+          if (userData.emailVerified) {
             navigate('/restaurant-pending', { replace: true });
             return;
           }

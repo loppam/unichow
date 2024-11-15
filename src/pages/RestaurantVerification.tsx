@@ -14,21 +14,27 @@ export default function RestaurantVerification() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) return;
     loadVerificationData();
   }, [user]);
 
   const loadVerificationData = async () => {
+    if (!user?.uid) return;
+    
     try {
+      setLoading(true);
+      setError('');
+      
       const [docs, verificationStatus] = await Promise.all([
-        verificationService.getDocuments(user!.uid),
-        verificationService.getVerificationStatus(user!.uid)
+        verificationService.getDocuments(user.uid),
+        verificationService.getVerificationStatus(user.uid)
       ]);
-      setDocuments(docs);
+      
+      setDocuments(docs || []);
       setStatus(verificationStatus);
     } catch (err) {
-      setError('Failed to load verification data');
-      console.error(err);
+      console.error('Error loading verification data:', err);
+      setError('Failed to load verification data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -39,7 +45,15 @@ export default function RestaurantVerification() {
     type: VerificationDocument['type'],
     expiryDate?: string
   ) => {
-    if (!user) return;
+    if (!user?.uid) {
+      setError('Please log in to upload documents');
+      return;
+    }
+
+    if (!file) {
+      setError('Please select a file to upload');
+      return;
+    }
 
     setUploading(true);
     setError('');
@@ -51,26 +65,41 @@ export default function RestaurantVerification() {
         type,
         expiryDate
       );
-      setDocuments(prev => [...prev, newDoc]);
-      await loadVerificationData();
+      
+      if (newDoc) {
+        setDocuments(prev => [...prev, newDoc]);
+        await loadVerificationData();
+      }
     } catch (err) {
-      setError('Failed to upload document');
-      console.error(err);
+      console.error('Error uploading document:', err);
+      setError('Failed to upload document. Please try again.');
     } finally {
       setUploading(false);
     }
   };
 
   const handleDelete = async (document: VerificationDocument) => {
-    if (!user || !window.confirm('Are you sure you want to delete this document?')) return;
+    if (!user?.uid) {
+      setError('Please log in to delete documents');
+      return;
+    }
+
+    if (!document?.id) {
+      setError('Invalid document');
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to delete this document?')) {
+      return;
+    }
 
     try {
       await verificationService.deleteDocument(user.uid, document);
       setDocuments(prev => prev.filter(doc => doc.id !== document.id));
       await loadVerificationData();
     } catch (err) {
-      setError('Failed to delete document');
-      console.error(err);
+      console.error('Error deleting document:', err);
+      setError('Failed to delete document. Please try again.');
     }
   };
 
@@ -95,13 +124,23 @@ export default function RestaurantVerification() {
     );
   }
 
+  if (!user?.uid) {
+    return (
+      <RestaurantLayout>
+        <div className="flex justify-center items-center h-96">
+          <div className="text-red-500">Please log in to view verification status</div>
+        </div>
+      </RestaurantLayout>
+    );
+  }
+
   return (
     <RestaurantLayout>
       <div className="max-w-4xl mx-auto p-6 space-y-8">
         {/* Status Overview */}
         <div className="bg-white p-6 rounded-lg shadow-sm">
           <h2 className="text-xl font-semibold mb-4">Verification Status</h2>
-          {status && (
+          {status ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <div className={`h-3 w-3 rounded-full ${
@@ -112,7 +151,7 @@ export default function RestaurantVerification() {
                 </span>
               </div>
               
-              {status.pendingDocuments.length > 0 && (
+              {status?.pendingDocuments && status.pendingDocuments.length > 0 && (
                 <div className="text-sm text-gray-600">
                   Required documents:
                   <ul className="list-disc list-inside mt-1">
@@ -123,6 +162,8 @@ export default function RestaurantVerification() {
                 </div>
               )}
             </div>
+          ) : (
+            <div className="text-gray-500">Loading verification status...</div>
           )}
         </div>
 

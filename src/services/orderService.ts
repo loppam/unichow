@@ -1,10 +1,15 @@
 import { db } from '../firebase/config';
-import { collection, doc, query, where, orderBy, limit, updateDoc, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
-import { Order, OrderStatus } from '../types/order';
+import { collection, doc, query, where, orderBy, limit, updateDoc, getDoc, getDocs, onSnapshot, increment, setDoc } from 'firebase/firestore';
+import { Order, OrderStatus, OrderItem, Address, PaymentMethod } from '../types/order';
 import { notificationService } from './notificationService';
 
 export const orderService = {
-  async getOrders(restaurantId: string, status?: OrderStatus[], page = 1, pageSize = 10) {
+  async getOrders(
+    restaurantId: string, 
+    status?: OrderStatus[], 
+    page = 1, 
+    pageSize = 10
+  ): Promise<Order[]> {
     try {
       const skip = (page - 1) * pageSize;
       let q = query(
@@ -44,20 +49,21 @@ export const orderService = {
     orderId: string,
     status: OrderStatus,
     estimatedTime?: number
-  ) {
+  ): Promise<Partial<Order>> {
     try {
       const orderRef = doc(db, 'orders', orderId);
       const order = await this.getOrderById(orderId);
+      const timestamp = new Date().toISOString();
       
-      const updates: any = {
+      const updates: Partial<Order> = {
         status,
-        updatedAt: new Date().toISOString(),
+        updatedAt: timestamp,
       };
 
       // Add timestamp based on status
       switch (status) {
         case 'accepted':
-          updates.acceptedAt = new Date().toISOString();
+          updates.acceptedAt = timestamp;
           if (estimatedTime) {
             updates.estimatedDeliveryTime = new Date(
               Date.now() + estimatedTime * 60000
@@ -65,13 +71,13 @@ export const orderService = {
           }
           break;
         case 'preparing':
-          updates.preparedAt = new Date().toISOString();
+          updates.preparedAt = timestamp;
           break;
         case 'delivered':
-          updates.deliveredAt = new Date().toISOString();
+          updates.deliveredAt = timestamp;
           break;
         case 'cancelled':
-          updates.cancelledAt = new Date().toISOString();
+          updates.cancelledAt = timestamp;
           break;
       }
 
@@ -79,14 +85,14 @@ export const orderService = {
 
       // Create notification
       await notificationService.createOrderNotification(restaurantId, {
-          orderId,
-          message: `Order #${orderId.slice(-6)} has been ${status}`,
-          status: ['ready', 'delivered'].includes(status) ? 'completed' :
-              ['accepted', 'preparing'].includes(status) ? 'pending' : 'cancelled',
-          amount: order.total,
-          customerName: order.customerName,
-          timestamp: '',
-          read: false
+        orderId,
+        message: `Order #${orderId.slice(-6)} has been ${status}`,
+        status: ['ready', 'delivered'].includes(status) ? 'completed' :
+          ['accepted', 'preparing'].includes(status) ? 'pending' : 'cancelled',
+        amount: order.total,
+        customerName: order.customerName,
+        timestamp,
+        read: false
       });
 
       return updates;
@@ -96,7 +102,10 @@ export const orderService = {
     }
   },
 
-  subscribeToNewOrders(restaurantId: string, callback: (orders: Order[]) => void) {
+  subscribeToNewOrders(
+    restaurantId: string, 
+    callback: (orders: Order[]) => void
+  ): () => void {
     const q = query(
       collection(db, 'orders'),
       where('restaurantId', '==', restaurantId),
@@ -111,5 +120,49 @@ export const orderService = {
       })) as Order[];
       callback(orders);
     });
+  },
+
+  async createOrder(data: {
+    customerId: string;
+    restaurantId: string;
+    items: OrderItem[];
+    deliveryAddress: Address;
+    paymentMethod: PaymentMethod;
+    customerName: string;
+  }): Promise<string> {
+    const orderRef = doc(collection(db, 'orders'));
+    const timestamp = new Date().toISOString();
+
+    // Calculate order total
+    const total = data.items.reduce(
+      (sum, item) => sum + (item.price * item.quantity),
+      0
+    );
+
+    // Create order and update restaurant stats in parallel
+    await Promise.all([
+      // Create order document
+      setDoc(orderRef, {
+        customerId: data.customerId,
+        restaurantId: data.restaurantId,
+        customerName: data.customerName,
+        items: data.items,
+        status: 'pending' as OrderStatus,
+        total,
+        deliveryAddress: data.deliveryAddress,
+        paymentMethod: data.paymentMethod,
+        paymentStatus: 'pending',
+        createdAt: timestamp,
+        updatedAt: timestamp
+      } as Order),
+
+      // Update restaurant stats
+      updateDoc(doc(db, 'restaurants', data.restaurantId), {
+        totalOrders: increment(1),
+        updatedAt: timestamp
+      })
+    ]);
+
+    return orderRef.id;
   }
 };

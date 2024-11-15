@@ -1,44 +1,38 @@
 import { useEffect, useState } from 'react';
 import { adminService } from '../../services/adminService';
+import { toast } from 'react-hot-toast';
 import { MetricCard } from './MetricCard';
 
-interface Metrics {
-  serverLoad: number;
-  loadTrend: number;
+interface SystemMetrics {
+  serverLoad: {
+    cpu: number;
+  };
   activeUsers: number;
-  usersTrend: number;
-  errorRate: number;
-  errorTrend: number;
-  responseTime: number;
-  responseTrend: number;
+  systemErrors: number;
+  averageResponseTime: number;
 }
 
 export default function SystemHealth() {
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadMetrics = async () => {
-    try {
-      const data = await adminService.getSystemHealth();
-      const formattedData: Metrics = {
-        serverLoad: data.serverLoad.cpu + data.serverLoad.memory + data.serverLoad.network,
-        loadTrend: 0, // Assuming default or placeholder value
-        activeUsers: data.activeUsers,
-        usersTrend: 0, // Assuming default or placeholder value
-        errorRate: data.systemErrors, // Assuming systemErrors is the correct field for errorRate
-        errorTrend: 0, // Assuming default or placeholder value
-        responseTime: 0, // Assuming default or placeholder value
-        responseTrend: 0, // Assuming default or placeholder value
-      };
-      setMetrics(formattedData);
-    } catch (error) {
-      console.error('Failed to load metrics:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const loadMetrics = async () => {
+      try {
+        setLoading(true);
+        const data = await adminService.getSystemHealth();
+        if ('serverLoad' in data && 'activeUsers' in data && 'systemErrors' in data && 'averageResponseTime' in data) {
+          setMetrics(data as SystemMetrics);
+        } else {
+          throw new Error('Invalid metrics data format');
+        }
+      } catch (error) {
+        toast.error('Failed to load system metrics');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     loadMetrics();
     const interval = setInterval(loadMetrics, 60000); // Refresh every minute
     return () => clearInterval(interval);
@@ -52,26 +46,26 @@ export default function SystemHealth() {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       <MetricCard
         title="Server Load"
-        value={`${metrics?.serverLoad ?? 0}%`}
-        trend={metrics?.loadTrend}
+        value={`${metrics?.serverLoad.cpu ?? 0}%`}
+        trend={metrics?.serverLoad.cpu}
         description="Current server utilization"
       />
       <MetricCard
         title="Active Users"
         value={metrics?.activeUsers ?? 0}
-        trend={metrics?.usersTrend}
+        trend={metrics?.activeUsers}
         description="Users in last 30 minutes"
       />
       <MetricCard
         title="Error Rate"
-        value={`${metrics?.errorRate ?? 0}%`}
-        trend={metrics?.errorTrend}
+        value={`${metrics?.systemErrors ?? 0}%`}
+        trend={metrics?.systemErrors}
         description="Errors in last hour"
       />
       <MetricCard
         title="Response Time"
-        value={`${metrics?.responseTime ?? 0}ms`}
-        trend={metrics?.responseTrend}
+        value={`${metrics?.averageResponseTime ?? 0}ms`}
+        trend={metrics?.averageResponseTime}
         description="Average response time"
       />
     </div>

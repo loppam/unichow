@@ -4,8 +4,10 @@ import RestaurantNavigation from "../components/RestaurantNavigation";
 import NotificationBell from "../components/NotificationBell";
 import { orderService } from "../services/orderService";
 import { TrendingUp, ShoppingBag, Clock, DollarSign } from "lucide-react";
-import { Order } from "../types/order";
+import { Order, OrderStatus } from "../types/order";
 import { MenuItem } from "../types/menu";
+import { restaurantService } from '../services/restaurantService';
+import { RestaurantProfile } from '../types/restaurant';
 
 interface DashboardStats {
   totalOrders: number;
@@ -25,6 +27,7 @@ export default function RestaurantDashboard() {
   const [loading, setLoading] = useState(true);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [popularItems, setPopularItems] = useState<MenuItem[]>([]);
+  const [profile, setProfile] = useState<RestaurantProfile | null>(null);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -32,9 +35,9 @@ export default function RestaurantDashboard() {
 
       try {
         const todayOrders = await orderService.getOrders(user.uid, [
-          "completed",
+          "delivered",
           "pending",
-        ]);
+        ] as OrderStatus[]);
         const pendingOrders = todayOrders.filter(
           (order) => order.status === "pending"
         );
@@ -55,7 +58,7 @@ export default function RestaurantDashboard() {
           totalOrders: todayOrders.length,
           pendingOrders: pendingOrders.length,
           todayRevenue: revenue,
-          averagePreparationTime: 25, // Placeholder - could be calculated from actual data
+          averagePreparationTime: 25,
         });
 
         setRecentOrders(todayOrders.slice(0, 5));
@@ -101,6 +104,14 @@ export default function RestaurantDashboard() {
     };
 
     fetchDashboardData();
+  }, [user]);
+
+  useEffect(() => {
+    if (user?.uid) {
+      restaurantService.getRestaurantProfile(user.uid)
+        .then(setProfile)
+        .catch(console.error);
+    }
   }, [user]);
 
   const statsCards = [

@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
-import { Truck } from "lucide-react";
 import Logo from "../components/Logo";
 
 export default function Login() {
@@ -12,15 +11,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(location.state?.error || "");
   const [loading, setLoading] = useState(false);
-  const [userType, setUserType] = useState<"user" | "restaurant" | null>(
-    location.state?.userType || null
-  );
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // Clear error when userType changes
-    setError("");
-  }, [userType]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,11 +19,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
       // Retry Firestore query with exponential backoff
       let delay = 1000;
@@ -41,19 +28,8 @@ export default function Login() {
 
       while (attempts > 0) {
         try {
-          const userDoc = await getDoc(
-            doc(db, "users", userCredential.user.uid)
-          );
+          const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
           userData = userDoc.data();
-
-          // For restaurant users, also check the restaurants collection
-          if (userType === "restaurant" && userData) {
-            const restaurantDoc = await getDoc(doc(db, "restaurants", userCredential.user.uid));
-            if (!restaurantDoc.exists()) {
-              throw new Error("Restaurant profile not found");
-            }
-          }
-
           break;
         } catch (firestoreError) {
           attempts--;
@@ -65,33 +41,36 @@ export default function Login() {
         }
       }
 
-      // If no userType selected, check for admin
-      if (!userType) {
-        if (userData?.isAdmin === true || userData?.isAdmin === "true") {
-          navigate("/admin");
-          return;
-        }
-        setError("Invalid admin credentials");
-        await auth.signOut();
+      if (!userData) {
+        throw new Error("User data not found");
+      }
+
+      // Check admin first
+      if (userData.isAdmin === true || userData.isAdmin === "true") {
+        navigate("/admin");
         return;
       }
 
-      // Handle regular user types
-      if (!userData || userData.userType !== userType) {
-        await auth.signOut();
-        throw new Error(`Invalid account type. Please make sure you selected the correct account type.`);
-      }
-
-      if (!userCredential.user.emailVerified) {
+      // Reload user to get latest email verification status
+      await userCredential.user.reload();
+      const updatedUser = auth.currentUser;
+      
+      if (!updatedUser?.emailVerified) {
         navigate(
-          userType === "restaurant"
+          userData.userType === "restaurant"
             ? "/restaurant-verify-email"
             : "/verify-email"
         );
         return;
       }
 
-      if (userType === "restaurant") {
+      // Handle restaurant-specific checks
+      if (userData.userType === "restaurant") {
+        const restaurantDoc = await getDoc(doc(db, "restaurants", userCredential.user.uid));
+        if (!restaurantDoc.exists()) {
+          throw new Error("Restaurant profile not found");
+        }
+
         if (!userData.isApproved) {
           if (userData.status === 'rejected') {
             await auth.signOut();
@@ -139,32 +118,6 @@ export default function Login() {
           </div>
         )}
 
-        <div className="flex gap-4 mb-6">
-          <button
-            type="button"
-            onClick={() => setUserType("user")}
-            className={`flex-1 p-4 border rounded-lg flex flex-col items-center gap-2 transition-all ${
-              userType === "user"
-                ? "border-black bg-black text-white"
-                : "border-gray-200 hover:border-gray-300"
-            }`}
-          >
-            <span className="text-lg font-medium">Customer</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setUserType("restaurant")}
-            className={`flex-1 p-4 border rounded-lg flex flex-col items-center gap-2 transition-all ${
-              userType === "restaurant"
-                ? "border-black bg-black text-white"
-                : "border-gray-200 hover:border-gray-300"
-            }`}
-          >
-            <Truck size={24} />
-            <span className="text-lg font-medium">Restaurant</span>
-          </button>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <input
@@ -203,10 +156,7 @@ export default function Login() {
 
         <p className="text-center text-gray-600 mt-6">
           Don't have an account?{" "}
-          <Link
-            to="/register"
-            className="text-black font-medium hover:underline"
-          >
+          <Link to="/register" className="text-black font-medium hover:underline">
             Register
           </Link>
         </p>

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { collection, query, where, getDocs, Timestamp, getDoc, doc } from "firebase/firestore";
 import { db } from "../../firebase/config";
-import AdminLayout from "../../components/AdminLayout";
 import { Users, ShoppingBag, TrendingUp, DollarSign } from "lucide-react";
 import { auth } from "../../firebase/config";
 
@@ -137,21 +136,17 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <AdminLayout>
-        <div className="flex justify-center items-center h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-        </div>
-      </AdminLayout>
+      <div className="flex justify-center items-center h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
     );
   }
 
   if (error || !analytics) {
     return (
-      <AdminLayout>
-        <div className="bg-red-50 text-red-500 p-4 rounded-lg">
-          {error || "Failed to load analytics"}
-        </div>
-      </AdminLayout>
+      <div className="bg-red-50 text-red-500 p-4 rounded-lg">
+        {error || "Failed to load analytics"}
+      </div>
     );
   }
 
@@ -183,59 +178,57 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
-        {/* Admin Type Badge */}
-        <div className="flex justify-end">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
-            {analytics.adminType}
-          </span>
-        </div>
+    <div className="space-y-6 p-6">
+      {/* Admin Type Badge */}
+      <div className="flex justify-end">
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+          {analytics.adminType}
+        </span>
+      </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {statsCards.map((stat, index) => (
-            <div key={index} className="bg-white p-6 rounded-lg shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm">{stat.title}</p>
-                  <p className="text-2xl font-semibold mt-1">{stat.value}</p>
-                </div>
-                <div className={`${stat.color} p-3 rounded-full text-white`}>
-                  <stat.icon className="h-6 w-6" />
-                </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {statsCards.map((stat, index) => (
+          <div key={index} className="bg-white p-6 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-500 text-sm">{stat.title}</p>
+                <p className="text-2xl font-semibold mt-1">{stat.value}</p>
+              </div>
+              <div className={`${stat.color} p-3 rounded-full text-white`}>
+                <stat.icon className="h-6 w-6" />
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
+      </div>
 
-        {/* Restaurant Status Summary */}
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-lg font-semibold mb-4">
-            Restaurant Status Summary
-          </h2>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">
-                {analytics.restaurantsByStatus.approved}
-              </p>
-              <p className="text-gray-500">Approved</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-yellow-600">
-                {analytics.restaurantsByStatus.pending}
-              </p>
-              <p className="text-gray-500">Pending</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-red-600">
-                {analytics.restaurantsByStatus.rejected}
-              </p>
-              <p className="text-gray-500">Rejected</p>
-            </div>
+      {/* Restaurant Status Summary */}
+      <div className="bg-white p-6 rounded-lg shadow-sm">
+        <h2 className="text-lg font-semibold mb-4">
+          Restaurant Status Summary
+        </h2>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-green-600">
+              {analytics.restaurantsByStatus.approved}
+            </p>
+            <p className="text-gray-500">Approved</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-yellow-600">
+              {analytics.restaurantsByStatus.pending}
+            </p>
+            <p className="text-gray-500">Pending</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-red-600">
+              {analytics.restaurantsByStatus.rejected}
+            </p>
+            <p className="text-gray-500">Rejected</p>
           </div>
         </div>
       </div>
-    </AdminLayout>
+    </div>
   );
 }

@@ -1,22 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import { db, storage } from '../firebase/config';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
+import { restaurantService } from '../services/restaurantService';
+import { toast } from 'react-hot-toast';
+import { RestaurantStatus } from '../types/restaurant';
+import { Address } from '../types/order';
 
 interface RestaurantProfile {
+  id: string;
   restaurantName: string;
   description: string;
   cuisine: string[];
-  address: string;
+  address: Address;
   phone: string;
+  email: string;
   openingHours: string;
   closingHours: string;
   minimumOrder: number;
   profileComplete: boolean;
+  status: RestaurantStatus;
+  isApproved: boolean;
+  rating: number;
+  totalOrders: number;
   logo?: string;
   bannerImage?: string;
+  createdAt: string;
+  updatedAt: string;
   lastUpdated?: string;
 }
 
@@ -25,256 +34,370 @@ export default function RestaurantProfile() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [profile, setProfile] = useState<RestaurantProfile>({
+    id: '',
     restaurantName: '',
     description: '',
     cuisine: [],
-    address: '',
+    address: {
+      street: '',
+      city: '',
+      state: '',
+      country: '',
+      postalCode: ''
+    },
     phone: '',
+    email: '',
     openingHours: '',
     closingHours: '',
     minimumOrder: 0,
-    profileComplete: false
+    profileComplete: false,
+    status: 'pending',
+    isApproved: false,
+    rating: 0,
+    totalOrders: 0,
+    createdAt: '',
+    updatedAt: ''
   });
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [bannerFile, setBannerFile] = useState<File | null>(null);
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) return;
-      try {
-        const docRef = doc(db, 'users', user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setProfile(prevProfile => ({
-            ...prevProfile,
-            ...docSnap.data()
-          }));
-        }
-      } catch (err) {
-        setError('Failed to load profile');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    if (!user) {
+      toast.error('Please login to access this page');
+      navigate('/login');
+      return;
+    }
     fetchProfile();
-  }, [user]);
+  }, [user, navigate]);
 
-  const handleImageUpload = async (file: File, type: 'logo' | 'banner') => {
-    if (!user) return null;
-    const storageRef = ref(storage, `restaurants/${user.uid}/${type}/${file.name}`);
-    await uploadBytes(storageRef, file);
-    return getDownloadURL(storageRef);
+  const fetchProfile = async () => {
+    if (!user?.uid) {
+      toast.error('Authentication required');
+      navigate('/login');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const restaurantData = await restaurantService.getRestaurantProfile(user.uid);
+      if (restaurantData) {
+        setProfile(prev => ({
+          ...prev,
+          ...restaurantData
+        }));
+      }
+    } catch (err) {
+      toast.error('Failed to load profile');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    
+    if (!user?.uid) {
+      toast.error('Authentication required');
+      navigate('/login');
+      return;
+    }
 
     setSaving(true);
-    setError('');
-    setSuccess('');
+    const formElement = e.target as HTMLFormElement;
+    const formData = new FormData(formElement);
 
     try {
-      let updates = { ...profile };
-
-      if (logoFile) {
-        const logoUrl = await handleImageUpload(logoFile, 'logo');
-        if (logoUrl) updates.logo = logoUrl;
-      }
-      if (bannerFile) {
-        const bannerUrl = await handleImageUpload(bannerFile, 'banner');
-        if (bannerUrl) updates.bannerImage = bannerUrl;
-      }
-
       // Validate required fields
-      const requiredFields = ['restaurantName', 'description', 'cuisine', 'address', 'phone'] as const;
-      const missingFields = requiredFields.filter(field => !updates[field as keyof RestaurantProfile]);
+      const requiredFields = ['restaurantName', 'description', 'address', 'phone'] as const;
+      const missingFields = requiredFields.filter(field => !formData.get(field));
       
       if (missingFields.length > 0) {
         throw new Error(`Please fill in all required fields: ${missingFields.join(', ')}`);
       }
 
-      updates.profileComplete = true;
-      updates.lastUpdated = new Date().toISOString();
+      const logoFile = formData.get('logo') as File;
+      const bannerFile = formData.get('banner') as File;
 
-      await updateDoc(doc(db, 'users', user.uid), updates);
-      setSuccess('Profile updated successfully');
+      await restaurantService.updateProfile(
+        user.uid,
+        {
+          ...profile,
+          restaurantName: formData.get('restaurantName') as string,
+          description: formData.get('description') as string,
+          address: {
+            street: formData.get('address.street') as string,
+            city: formData.get('address.city') as string,
+            state: formData.get('address.state') as string,
+            country: formData.get('address.country') as string,
+            postalCode: formData.get('address.postalCode') as string,
+          },
+          phone: formData.get('phone') as string,
+          openingHours: formData.get('openingHours') as string,
+          closingHours: formData.get('closingHours') as string,
+          minimumOrder: Number(formData.get('minimumOrder')),
+          profileComplete: true,
+          lastUpdated: new Date().toISOString()
+        },
+        { logo: logoFile, banner: bannerFile }
+      );
+
+      toast.success('Profile updated successfully');
       navigate('/restaurant-dashboard');
     } catch (err) {
       console.error('Error updating profile:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update profile');
+      toast.error(err instanceof Error ? err.message : 'Failed to update profile');
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-3xl mx-auto px-4">
-        <h1 className="text-2xl font-bold mb-6">Complete Your Restaurant Profile</h1>
+        <h1 className="text-2xl font-bold mb-6">Restaurant Profile</h1>
         
-        {error && (
-          <div className="bg-red-50 text-red-500 p-4 rounded-lg mb-6">
-            {error}
-          </div>
-        )}
-        
-        {success && (
-          <div className="bg-green-50 text-green-500 p-4 rounded-lg mb-6">
-            {success}
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Restaurant Name *
-              </label>
-              <input
-                type="text"
-                value={profile.restaurantName}
-                onChange={e => setProfile(p => ({ ...p, restaurantName: e.target.value }))}
-                className="w-full p-2 border rounded-lg"
-                required
-              />
-            </div>
+            <FormField
+              label="Restaurant Name"
+              name="restaurantName"
+              value={profile.restaurantName}
+              onChange={(value) => setProfile(p => ({ ...p, restaurantName: value }))}
+              required
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number *
-              </label>
-              <input
-                type="tel"
-                value={profile.phone}
-                onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))}
-                className="w-full p-2 border rounded-lg"
-                required
-              />
-            </div>
+            <FormField
+              label="Phone Number"
+              name="phone"
+              type="tel"
+              value={profile.phone}
+              onChange={(value) => setProfile(p => ({ ...p, phone: value }))}
+              required
+            />
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description *
-              </label>
-              <textarea
+              <FormField
+                label="Description"
+                name="description"
+                type="textarea"
                 value={profile.description}
-                onChange={e => setProfile(p => ({ ...p, description: e.target.value }))}
-                className="w-full p-2 border rounded-lg"
-                rows={4}
+                onChange={(value) => setProfile(p => ({ ...p, description: value }))}
                 required
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Address *
-              </label>
-              <input
-                type="text"
-                value={profile.address}
-                onChange={e => setProfile(p => ({ ...p, address: e.target.value }))}
-                className="w-full p-2 border rounded-lg"
-                required
-              />
+              <div className="space-y-4">
+                <FormField
+                  label="Street"
+                  name="address.street"
+                  value={profile.address.street}
+                  onChange={(value) => setProfile(p => ({ 
+                    ...p, 
+                    address: { ...p.address, street: value }
+                  }))}
+                  required
+                />
+                <FormField
+                  label="City"
+                  name="address.city"
+                  value={profile.address.city}
+                  onChange={(value) => setProfile(p => ({ 
+                    ...p, 
+                    address: { ...p.address, city: value }
+                  }))}
+                  required
+                />
+                <FormField
+                  label="State"
+                  name="address.state"
+                  value={profile.address.state}
+                  onChange={(value) => setProfile(p => ({ 
+                    ...p, 
+                    address: { ...p.address, state: value }
+                  }))}
+                  required
+                />
+                <FormField
+                  label="Country"
+                  name="address.country"
+                  value={profile.address.country}
+                  onChange={(value) => setProfile(p => ({ 
+                    ...p, 
+                    address: { ...p.address, country: value }
+                  }))}
+                  required
+                />
+                <FormField
+                  label="Postal Code"
+                  name="address.postalCode"
+                  value={profile.address.postalCode}
+                  onChange={(value) => setProfile(p => ({ 
+                    ...p, 
+                    address: { ...p.address, postalCode: value }
+                  }))}
+                  required
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Opening Hours *
-              </label>
-              <input
-                type="time"
-                value={profile.openingHours}
-                onChange={e => setProfile(p => ({ ...p, openingHours: e.target.value }))}
-                className="w-full p-2 border rounded-lg"
-                required
-              />
-            </div>
+            <FormField
+              label="Opening Hours"
+              name="openingHours"
+              type="time"
+              value={profile.openingHours}
+              onChange={(value) => setProfile(p => ({ ...p, openingHours: value }))}
+              required
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Closing Hours *
-              </label>
-              <input
-                type="time"
-                value={profile.closingHours}
-                onChange={e => setProfile(p => ({ ...p, closingHours: e.target.value }))}
-                className="w-full p-2 border rounded-lg"
-                required
-              />
-            </div>
+            <FormField
+              label="Closing Hours"
+              name="closingHours"
+              type="time"
+              value={profile.closingHours}
+              onChange={(value) => setProfile(p => ({ ...p, closingHours: value }))}
+              required
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Minimum Order ($)
-              </label>
-              <input
-                type="number"
-                value={profile.minimumOrder}
-                onChange={e => setProfile(p => ({ ...p, minimumOrder: Number(e.target.value) }))}
-                className="w-full p-2 border rounded-lg"
-                min="0"
-                step="0.01"
-              />
-            </div>
+            <FormField
+              label="Minimum Order ($)"
+              name="minimumOrder"
+              type="number"
+              value={profile.minimumOrder.toString()}
+              onChange={(value) => setProfile(p => ({ ...p, minimumOrder: Number(value) }))}
+              min="0"
+              step="0.01"
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Logo
-              </label>
-              <input
-                type="file"
-                onChange={e => setLogoFile(e.target.files?.[0] || null)}
-                accept="image/*"
-                className="w-full p-2 border rounded-lg"
-              />
-            </div>
+            <ImageUploadField
+              label="Logo"
+              name="logo"
+              currentImage={profile.logo}
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Banner Image
-              </label>
-              <input
-                type="file"
-                onChange={e => setBannerFile(e.target.files?.[0] || null)}
-                accept="image/*"
-                className="w-full p-2 border rounded-lg"
-              />
-            </div>
+            <ImageUploadField
+              label="Banner Image"
+              name="banner"
+              currentImage={profile.bannerImage}
+            />
           </div>
 
-          <div className="flex justify-end space-x-4">
-            <button
-              type="button"
-              onClick={() => navigate('/restaurant-dashboard')}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Profile'}
-            </button>
-          </div>
+          <FormActions
+            onCancel={() => navigate('/restaurant-dashboard')}
+            saving={saving}
+          />
         </form>
       </div>
     </div>
   );
-} 
+}
+
+// Utility Components
+const LoadingSpinner = () => (
+  <div className="flex justify-center items-center min-h-screen">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+  </div>
+);
+
+const FormField = ({ 
+  label, 
+  name, 
+  type = 'text', 
+  value, 
+  onChange,
+  required = false,
+  ...props 
+}: {
+  label: string;
+  name: string;
+  type?: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  [key: string]: any;
+}) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-2">
+      {label} {required && '*'}
+    </label>
+    {type === 'textarea' ? (
+      <textarea
+        name={name}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full p-2 border rounded-lg"
+        rows={4}
+        required={required}
+        {...props}
+      />
+    ) : (
+      <input
+        type={type}
+        name={name}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full p-2 border rounded-lg"
+        required={required}
+        {...props}
+      />
+    )}
+  </div>
+);
+
+const ImageUploadField = ({ 
+  label, 
+  name, 
+  currentImage 
+}: {
+  label: string;
+  name: string;
+  currentImage?: string;
+}) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-2">
+      {label}
+    </label>
+    {currentImage && (
+      <img
+        src={currentImage}
+        alt={label}
+        className="w-20 h-20 object-cover rounded-lg mb-2"
+      />
+    )}
+    <input
+      type="file"
+      name={name}
+      accept="image/*"
+      className="w-full p-2 border rounded-lg"
+    />
+  </div>
+);
+
+const FormActions = ({ 
+  onCancel, 
+  saving 
+}: {
+  onCancel: () => void;
+  saving: boolean;
+}) => (
+  <div className="flex justify-end space-x-4">
+    <button
+      type="button"
+      onClick={onCancel}
+      className="px-4 py-2 text-gray-600 hover:text-gray-800"
+    >
+      Cancel
+    </button>
+    <button
+      type="submit"
+      disabled={saving}
+      className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+    >
+      {saving ? 'Saving...' : 'Save Profile'}
+    </button>
+  </div>
+); 

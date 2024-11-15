@@ -22,6 +22,29 @@ export default function EmailVerification() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
+        
+        // Check Firestore first
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const userData = userDoc.data();
+        
+        if (userData?.emailVerified) {
+          // User is already verified in Firestore, redirect them
+          if (userData.userType === 'restaurant') {
+            if (!userData.isApproved) {
+              navigate('/login', { 
+                state: { 
+                  message: "Please wait for admin approval to access your account." 
+                }
+              });
+            } else {
+              navigate('/restaurant-dashboard');
+            }
+          } else {
+            navigate('/home');
+          }
+          return;
+        }
+        
         if (!emailSent) {
           sendVerificationEmail(user);
         }
@@ -29,7 +52,7 @@ export default function EmailVerification() {
     });
 
     return () => unsubscribe();
-  }, [emailSent]);
+  }, [emailSent, navigate]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -84,13 +107,16 @@ export default function EmailVerification() {
       const updatedUser = auth.currentUser;
 
       if (updatedUser?.emailVerified) {
-        const userDoc = await getDoc(doc(db, "users", updatedUser.uid));
-        const userData = userDoc.data();
-
-        await updateDoc(doc(db, "users", updatedUser.uid), {
+        const userRef = doc(db, "users", updatedUser.uid);
+        
+        // Update both emailVerified and lastUpdated in a single transaction
+        await updateDoc(userRef, {
           emailVerified: true,
           lastUpdated: new Date().toISOString(),
         });
+
+        const userDoc = await getDoc(userRef);
+        const userData = userDoc.data();
 
         // Navigate based on user type
         if (userData?.userType === 'restaurant') {
@@ -111,6 +137,7 @@ export default function EmailVerification() {
         setError('Email not verified yet. Please check your email and click the verification link.');
       }
     } catch (err) {
+      console.error('Verification error:', err);
       setError('Failed to verify email status. Please try again.');
     } finally {
       setLoading(false);

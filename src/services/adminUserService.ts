@@ -1,5 +1,6 @@
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../firebase/config';
+import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase/config';
 import { UserRole } from '../constants/roles';
 
 export interface AdminUser {
@@ -14,26 +15,59 @@ export interface AdminUser {
   isAdmin: boolean;
 }
 
-async function createNewAdmin(adminData: {
+// Define the interface for admin creation data
+interface CreateAdminData {
   email: string;
   password: string;
   firstName: string;
   lastName: string;
+  number: string;
   isSuperAdmin: boolean;
-  role: string;
-}) {
+  role: UserRole;
+}
+
+async function createNewAdmin(adminData: CreateAdminData) {
   try {
-    const createAdminFunction = httpsCallable(functions, 'createAdminUser');
-    const result = await createAdminFunction({
-      email: adminData.email,
-      temporaryPassword: adminData.password,
+    const currentUser = getAuth().currentUser;
+    if (!currentUser) {
+      throw new Error('Not authenticated');
+    }
+
+    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+    const userData = userDoc.data();
+    
+    if (!userData || userData.role !== 'superadmin') {
+      throw new Error('Only super admins can create new admin accounts');
+    }
+
+    // Create user in Firebase Auth
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      adminData.email,
+      adminData.password
+    );
+
+    // Determine if the user should be a superadmin based on role
+    const isSuperAdmin = adminData.role === 'superadmin';
+
+    // Create user document in Firestore
+    await setDoc(doc(db, 'users', userCredential.user.uid), {
       firstName: adminData.firstName,
       lastName: adminData.lastName,
-      role: adminData.isSuperAdmin ? 'superadmin' : 'admin',
-      permissions: []
+      email: adminData.email,
+      phone: adminData.number,
+      role: adminData.role,
+      isAdmin: true,
+      isSuperAdmin: isSuperAdmin,
+      userType: 'admin',
+      createdAt: new Date().toISOString(),
+      status: 'active',
+      permissions: [],
+      lastUpdated: new Date().toISOString(),
+      emailVerified: true
     });
     
-    return result.data;
+    return userCredential.user;
   } catch (error) {
     console.error("Error creating admin:", error);
     throw error;

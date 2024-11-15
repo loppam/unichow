@@ -28,7 +28,7 @@ export async function testNotification(userId: string) {
     
     if (!response.ok) {
       console.error('Notification API error:', data);
-      throw new Error(data.details || 'Failed to send test notification');
+      throw new Error(data.details || data.error || 'Failed to send test notification');
     }
 
     return true;

@@ -21,23 +21,22 @@ export default function MenuItemModal({
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [customOptions, setCustomOptions] = useState<string[]>([]);
+  const [newOption, setNewOption] = useState('');
   
   const [formData, setFormData] = useState<Partial<MenuItem>>({
     name: '',
     description: '',
     price: 0,
     category: '',
-    available: true,
     preparationTime: 15,
-    allergens: [],
-    spicyLevel: 1,
-    vegetarian: false,
-    featured: false
+    customOptions: []
   });
 
   useEffect(() => {
     if (item) {
       setFormData(item);
+      setCustomOptions(item.customOptions || []);
     } else {
       resetForm();
     }
@@ -49,14 +48,31 @@ export default function MenuItemModal({
       description: '',
       price: 0,
       category: categories[0]?.id || '',
-      available: true,
       preparationTime: 15,
-      allergens: [],
-      spicyLevel: 1,
-      vegetarian: false,
-      featured: false
+      customOptions: []
     });
+    setCustomOptions([]);
+    setNewOption('');
     setError('');
+  };
+
+  const handleAddOption = () => {
+    if (newOption.trim()) {
+      setCustomOptions(prev => [...prev, newOption.trim()]);
+      setFormData(prev => ({
+        ...prev,
+        customOptions: [...(prev.customOptions || []), newOption.trim()]
+      }));
+      setNewOption('');
+    }
+  };
+
+  const handleRemoveOption = (index: number) => {
+    setCustomOptions(prev => prev.filter((_, i) => i !== index));
+    setFormData(prev => ({
+      ...prev,
+      customOptions: prev.customOptions?.filter((_, i) => i !== index)
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -180,71 +196,33 @@ export default function MenuItemModal({
               </div>
             </div>
 
-            {/* Additional Options */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Spicy Level
-                </label>
-                <select
-                  value={formData.spicyLevel}
-                  onChange={e => setFormData(prev => ({ ...prev, spicyLevel: Number(e.target.value) as 1 | 2 | 3 }))}
-                  className="w-full p-2 border rounded-lg"
-                >
-                  <option value={1}>Mild</option>
-                  <option value={2}>Medium</option>
-                  <option value={3}>Hot</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Allergens
-                </label>
+            {/* Custom Options */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Custom Options
+              </label>
+              <div className="flex gap-2">
                 <input
                   type="text"
-                  value={formData.allergens?.join(', ')}
-                  onChange={e => setFormData(prev => ({ 
-                    ...prev, 
-                    allergens: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-                  }))}
+                  value={newOption}
+                  onChange={e => setNewOption(e.target.value)}
                   className="w-full p-2 border rounded-lg"
-                  placeholder="e.g., nuts, dairy, gluten"
+                  placeholder="Add a new option"
                 />
+                <button onClick={handleAddOption} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                  Add
+                </button>
               </div>
-            </div>
-
-            {/* Checkboxes */}
-            <div className="flex gap-6">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.available}
-                  onChange={e => setFormData(prev => ({ ...prev, available: e.target.checked }))}
-                  className="rounded"
-                />
-                <span className="text-sm">Available</span>
-              </label>
-
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.vegetarian}
-                  onChange={e => setFormData(prev => ({ ...prev, vegetarian: e.target.checked }))}
-                  className="rounded"
-                />
-                <span className="text-sm">Vegetarian</span>
-              </label>
-
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.featured}
-                  onChange={e => setFormData(prev => ({ ...prev, featured: e.target.checked }))}
-                  className="rounded"
-                />
-                <span className="text-sm">Featured</span>
-              </label>
+              <div className="mt-2">
+                {customOptions.map((option, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <span>{option}</span>
+                    <button onClick={() => handleRemoveOption(index)} className="text-red-500 hover:text-red-700">
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Submit Button */}

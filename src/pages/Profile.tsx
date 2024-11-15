@@ -25,6 +25,11 @@ export default function Profile() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedDetails, setEditedDetails] = useState<Partial<UserDetails>>({});
   const [saving, setSaving] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(user?.emailVerified || false);
+
+  useEffect(() => {
+    setEmailVerified(user?.emailVerified || false);
+  }, [user?.emailVerified]);
 
   useEffect(() => {
     const fetchUserDetails = async () => {
@@ -244,10 +249,10 @@ export default function Profile() {
               <label className="text-sm text-gray-500">Email Status</label>
               <p
                 className={`font-medium ${
-                  user?.emailVerified ? "text-green-600" : "text-yellow-600"
+                  emailVerified ? "text-green-600" : "text-yellow-600"
                 }`}
               >
-                {user?.emailVerified ? "Verified" : "Not Verified"}
+                {emailVerified ? "Verified" : "Not Verified"}
               </p>
             </div>
 

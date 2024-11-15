@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import BottomNav from '../components/BottomNav';
 import RestaurantCard from '../components/RestaurantCard';
@@ -30,10 +30,7 @@ export default function Home() {
       const restaurantsRef = collection(db, 'restaurants');
       const q = query(
         restaurantsRef,
-        where('isApproved', '==', true),
-        where('status', '==', 'approved'),
-        orderBy('rating', 'desc'),
-        limit(5)
+        where('isApproved', '==', true)
       );
       
       const snapshot = await getDocs(q);
@@ -42,7 +39,11 @@ export default function Home() {
         ...doc.data()
       })) as Restaurant[];
 
-      setRestaurants(restaurantData);
+      restaurantData.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      
+      const topRestaurants = restaurantData.slice(0, 5);
+
+      setRestaurants(topRestaurants);
     } catch (err) {
       setError('Failed to load restaurants');
       console.error('Error loading restaurants:', err);

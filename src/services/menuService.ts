@@ -1,7 +1,6 @@
-import { db, storage } from '../firebase/config';
+import { db } from '../firebase/config';
 import { collection, doc, setDoc, updateDoc, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { MenuItem, MenuCategory } from '../types/menu';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export const menuService = {
   async addMenuItem(restaurantId: string, data: {
@@ -9,7 +8,6 @@ export const menuService = {
     description: string;
     price: number;
     category: string;
-    image?: File;
   }) {
     const menuRef = doc(collection(db, `restaurants/${restaurantId}/menu`));
     const timestamp = new Date().toISOString();
@@ -24,18 +22,6 @@ export const menuService = {
       createdAt: timestamp,
       updatedAt: timestamp
     });
-
-    // Handle image upload if provided
-    if (data.image) {
-      const imageRef = ref(storage, `restaurants/${restaurantId}/menu/${menuRef.id}`);
-      await uploadBytes(imageRef, data.image);
-      const imageUrl = await getDownloadURL(imageRef);
-
-      await updateDoc(menuRef, {
-        imageUrl,
-        updatedAt: new Date().toISOString()
-      });
-    }
 
     return menuRef.id;
   },

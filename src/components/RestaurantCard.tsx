@@ -1,6 +1,6 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Star } from 'lucide-react';
+import React from "react";
+import { Link } from "react-router-dom";
+import { Star } from "lucide-react";
 
 interface RestaurantCardProps {
   id: string;
@@ -11,16 +11,23 @@ interface RestaurantCardProps {
   minOrder: string;
 }
 
-export default function RestaurantCard({ id, name, image, rating, deliveryTime, minOrder }: RestaurantCardProps) {
+export default function RestaurantCard({
+  id,
+  name,
+  image,
+  rating,
+  deliveryTime,
+  minOrder,
+}: RestaurantCardProps) {
   return (
     <Link to={`/restaurant/${id}`} className="block">
       <div className="rounded-lg overflow-hidden shadow-md bg-white">
         <img
-          src={image || '/default-restaurant.jpg'}
+          src={image || "/default-restaurant.jpeg"}
           alt={name}
           className="w-full h-48 object-cover"
           onError={(e) => {
-            e.currentTarget.src = '/default-restaurant.jpg';
+            e.currentTarget.src = "/default-restaurant.jpeg";
           }}
         />
         <div className="p-4">

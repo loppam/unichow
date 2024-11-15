@@ -6,7 +6,6 @@ import { Plus, Edit2, Trash2 } from 'lucide-react';
 import MenuItemModal from '../components/menu/MenuItemModal';
 import CategoryModal from '../components/menu/CategoryModal';
 import RestaurantLayout from '../components/RestaurantLayout';
-import RestaurantNavigation from '../components/RestaurantNavigation';
 export default function RestaurantMenu() {
   const { user } = useAuth();
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -45,7 +44,13 @@ export default function RestaurantMenu() {
       if (selectedItem) {
         await menuService.updateMenuItem(user.uid, selectedItem.id, item);
       } else {
-        await menuService.addMenuItem(user.uid, item as Omit<MenuItem, 'id'>);
+        await menuService.addMenuItem(user.uid, item as {
+          name: string;
+          description: string;
+          price: number;
+          category: string;
+          image?: File;
+        });
       }
       await loadMenuData();
       setIsItemModalOpen(false);
@@ -76,6 +81,19 @@ export default function RestaurantMenu() {
       setSelectedCategory(null);
     } catch (err) {
       setError('Failed to save category');
+      console.error(err);
+    }
+  };
+
+  const handleToggleAvailability = async (item: MenuItem) => {
+    if (!user) return;
+    try {
+      await menuService.updateMenuItem(user.uid, item.id, {
+        isAvailable: !item.isAvailable
+      });
+      await loadMenuData();
+    } catch (err) {
+      setError('Failed to update item availability');
       console.error(err);
     }
   };
@@ -158,7 +176,19 @@ export default function RestaurantMenu() {
                 <div className="p-4">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-semibold">{item.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold">{item.name}</h3>
+                        <button
+                          onClick={() => handleToggleAvailability(item)}
+                          className={`px-2 py-1 text-xs rounded ${
+                            item.isAvailable 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-red-100 text-red-700'
+                          }`}
+                        >
+                          {item.isAvailable ? 'Available' : 'Unavailable'}
+                        </button>
+                      </div>
                       <p className="text-sm text-gray-500">{item.description}</p>
                       <p className="text-lg font-medium mt-2">${item.price.toFixed(2)}</p>
                     </div>

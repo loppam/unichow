@@ -1,11 +1,17 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+} from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import Logo from "../components/Logo";
 import Input from "../components/Input";
-import { Store, User as UserIcon } from "lucide-react"; // Import icons
+import { ArrowLeft, Store, User as UserIcon } from "lucide-react"; // Import icons
+
+// First, let's define the cuisine types (can be moved to a constants file)
+const CUISINE_TYPES = ["Pastries", "Bakery", "Fast Food"];
 
 export default function Register() {
   const [userType, setUserType] = useState<"user" | "restaurant" | null>(null);
@@ -20,7 +26,7 @@ export default function Register() {
     // Additional fields for restaurants
     restaurantName: "",
     description: "",
-    cuisine: "",
+    cuisineTypes: [] as string[],
     openingHours: "",
     closingHours: "",
   });
@@ -30,10 +36,10 @@ export default function Register() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    
-    if (name === 'phone') {
+
+    if (name === "phone") {
       // Remove any non-digit characters as user types
-      const cleaned = value.replace(/\D/g, '');
+      const cleaned = value.replace(/\D/g, "");
       setFormData((prev) => ({ ...prev, [name]: cleaned }));
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
@@ -74,7 +80,7 @@ export default function Register() {
         ...(userType === "restaurant" && {
           restaurantName: formData.restaurantName,
           description: formData.description,
-          cuisine: formData.cuisine,
+          cuisineTypes: formData.cuisineTypes,
           openingHours: formData.openingHours,
           closingHours: formData.closingHours,
           isApproved: false,
@@ -83,7 +89,7 @@ export default function Register() {
           name: `${formData.firstName} ${formData.lastName}`,
           phoneNumber: formData.phone,
           defaultAddress: formData.address,
-        })
+        }),
       };
 
       // Store in Firestore with retry logic
@@ -97,7 +103,7 @@ export default function Register() {
           if (retries === 0) {
             throw firestoreError;
           }
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
 
@@ -106,17 +112,20 @@ export default function Register() {
         const restaurantData = {
           restaurantName: formData.restaurantName,
           description: formData.description,
-          cuisine: formData.cuisine,
+          cuisineTypes: formData.cuisineTypes,
           openingHours: formData.openingHours,
           closingHours: formData.closingHours,
           isApproved: false,
-          status: 'pending',
+          status: "pending",
           email: formData.email,
           phone: formData.phone,
           address: formData.address,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
         };
-        await setDoc(doc(db, "restaurants", userCredential.user.uid), restaurantData);
+        await setDoc(
+          doc(db, "restaurants", userCredential.user.uid),
+          restaurantData
+        );
       }
 
       // Send verification email
@@ -124,9 +133,7 @@ export default function Register() {
 
       // Navigate based on user type
       navigate(
-        userType === "restaurant" 
-          ? "/restaurant-verify-email"
-          : "/verify-email"
+        userType === "restaurant" ? "/restaurant-verify-email" : "/verify-email"
       );
     } catch (err) {
       console.error("Registration error:", err);
@@ -135,7 +142,7 @@ export default function Register() {
       } else {
         setError("Failed to create account");
       }
-      
+
       // Clean up if registration fails
       if (auth.currentUser) {
         try {
@@ -149,13 +156,65 @@ export default function Register() {
     }
   };
 
+  // Add this component for the multi-select dropdown
+  const CuisineSelect = ({
+    selected,
+    onChange,
+  }: {
+    selected: string[];
+    onChange: (values: string[]) => void;
+  }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full p-2 border rounded-lg text-left flex justify-between items-center"
+        >
+          <span className="truncate">
+            {selected.length ? selected.join(", ") : "Select Cuisine Types"}
+          </span>
+          <span className="ml-2">▼</span>
+        </button>
+
+        {isOpen && (
+          <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
+            {CUISINE_TYPES.map((cuisine) => (
+              <label
+                key={cuisine}
+                className="flex items-center p-3 hover:bg-gray-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(cuisine)}
+                  onChange={(e) => {
+                    const newSelected = e.target.checked
+                      ? [...selected, cuisine]
+                      : selected.filter((item) => item !== cuisine);
+                    onChange(newSelected);
+                  }}
+                  className="mr-2"
+                />
+                {cuisine}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (!userType) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center p-4">
         <div className="w-full max-w-md">
           <Logo size="md" />
-          <h1 className="text-2xl font-bold mb-8 text-center">Create Account</h1>
-          
+          <h1 className="text-2xl font-bold mb-8 text-center">
+            Create Account
+          </h1>
+
           <div className="space-y-4">
             <button
               onClick={() => setUserType("user")}
@@ -164,7 +223,9 @@ export default function Register() {
               <UserIcon className="w-8 h-8" />
               <div className="text-left">
                 <h3 className="font-semibold">Register as Customer</h3>
-                <p className="text-sm text-gray-500">Order food from restaurants</p>
+                <p className="text-sm text-gray-500">
+                  Order food from restaurants
+                </p>
               </div>
             </button>
 
@@ -175,11 +236,19 @@ export default function Register() {
               <Store className="w-8 h-8" />
               <div className="text-left">
                 <h3 className="font-semibold">Register as Restaurant</h3>
-                <p className="text-sm text-gray-500">List your restaurant and receive orders</p>
+                <p className="text-sm text-gray-500">
+                  List your restaurant and receive orders
+                </p>
               </div>
             </button>
           </div>
         </div>
+        <p className="text-center text-gray-600 mt-6">
+          Already have an account?{" "}
+          <Link to="/login" className="text-black font-medium">
+            Login
+          </Link>
+        </p>
       </div>
     );
   }
@@ -189,15 +258,17 @@ export default function Register() {
       <div className="w-full max-w-md">
         <Logo size="md" />
         <div className="flex items-center gap-2 mb-8">
-          <h1 className="text-2xl font-bold text-center">
-            {userType === "restaurant" ? "Restaurant Registration" : "Create Account"}
-          </h1>
-          <button 
+          <button
             onClick={() => setUserType(null)}
-            className="text-sm text-gray-500 hover:text-black"
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-black"
           >
-            Change
+            <ArrowLeft size={16} />
           </button>
+          <h1 className="text-2xl font-bold text-center">
+            {userType === "restaurant"
+              ? "Restaurant Registration"
+              : "Create Account"}
+          </h1>
         </div>
 
         {error && (
@@ -224,30 +295,61 @@ export default function Register() {
                 onChange={handleChange}
                 required
               />
-              <Input
-                name="cuisine"
-                placeholder="Cuisine Type"
-                value={formData.cuisine}
-                onChange={handleChange}
-                required
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  name="openingHours"
-                  type="time"
-                  placeholder="Opening Hours"
-                  value={formData.openingHours}
-                  onChange={handleChange}
-                  required
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cuisine Types *
+                </label>
+                <CuisineSelect
+                  selected={formData.cuisineTypes}
+                  onChange={(values) =>
+                    setFormData((prev) => ({ ...prev, cuisineTypes: values }))
+                  }
                 />
-                <Input
-                  name="closingHours"
-                  type="time"
-                  placeholder="Closing Hours"
-                  value={formData.closingHours}
-                  onChange={handleChange}
-                  required
-                />
+                {formData.cuisineTypes.length === 0 && (
+                  <p className="text-sm text-red-500 mt-1">
+                    Please select at least one cuisine type
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Operating Hours *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Opening Time
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="time"
+                        name="openingHours"
+                        value={formData.openingHours}
+                        onChange={handleChange}
+                        className="w-full p-2 border rounded-lg appearance-none"
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">e.g., 09:00AM</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Closing Time
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="time"
+                        name="closingHours"
+                        value={formData.closingHours}
+                        onChange={handleChange}
+                        className="w-full p-2 border rounded-lg appearance-none"
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">e.g., 10:00PM</p>
+                  </div>
+                </div>
               </div>
             </>
           ) : null}

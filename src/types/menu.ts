@@ -1,18 +1,14 @@
-import { ReactNode } from "react";
-
 export interface MenuItem {
-  orderCount: ReactNode;
   id: string;
   name: string;
   description: string;
   price: number;
   category: string;
-  available: boolean;
+  isAvailable: boolean;
+  customOptions?: string[];
+  createdAt: string;
+  updatedAt: string;
   preparationTime: number;
-  allergens: string[];
-  spicyLevel: number;
-  vegetarian: boolean;
-  featured: boolean;
 }
 
 export interface MenuCategory {

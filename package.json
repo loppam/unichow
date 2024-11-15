@@ -8,7 +8,8 @@
     "vercel-dev": "vercel dev",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "vercel-build": "vite build"
   },
   "dependencies": {
     "@vercel/node": "^3.2.24",

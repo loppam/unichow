@@ -8,8 +8,7 @@ if ('serviceWorker' in navigator) {
   try {
     navigator.serviceWorker
       .register('/firebase-messaging-sw.js', {
-        scope: '/',
-        type: 'module'
+        scope: '/'
       })
       .then((registration) => {
         console.log('Service Worker registered:', registration);

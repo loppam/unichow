@@ -2,9 +2,7 @@ importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js')
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.4.1/workbox-sw.js');
 
-// This will be replaced by the manifest at build time
-self.__WB_MANIFEST;
-
+// Initialize Firebase with your config
 firebase.initializeApp({
   apiKey: "AIzaSyB0AEoFjTEtPnAdWRt5plOBvHcpQZDOI4I",
   authDomain: "unichow-49eb7.firebaseapp.com",
@@ -17,8 +15,15 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Use workbox for precaching
-workbox.precaching.precacheAndRoute(self.__WB_MANIFEST);
+// Handle precaching
+try {
+  // This will be replaced by the manifest at build time
+  self.__WB_MANIFEST;
+  workbox.precaching.precacheAndRoute(self.__WB_MANIFEST || []);
+} catch (error) {
+  console.warn('Precaching failed:', error);
+}
+
 workbox.core.clientsClaim();
 workbox.core.skipWaiting();
 

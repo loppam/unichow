@@ -10,11 +10,13 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'public',
       filename: 'firebase-messaging-sw.js',
-      injectRegister: 'auto',
-      registerType: 'autoUpdate',
+      injectRegister: false,
+      registerType: 'prompt',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
-        cleanupOutdatedCaches: true
+        cleanupOutdatedCaches: true,
+        sourcemap: true,
+        swDest: 'firebase-messaging-sw.js'
       },
       manifest: {
         name: 'UniChow Food Delivery',
@@ -34,8 +36,7 @@ export default defineConfig({
         ],
       },
       devOptions: {
-        enabled: true,
-        type: 'module',
+        enabled: true
       },
     }),
   ],

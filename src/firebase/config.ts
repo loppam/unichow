@@ -42,7 +42,7 @@ export const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
   vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-  privateKey: import.meta.env.VITE_FIREBASE_PRIVATE_KEY,
+  privateKey: import.meta.env.VITE_FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
   clientEmail: import.meta.env.VITE_FIREBASE_CLIENT_EMAIL,
 } as const;
 

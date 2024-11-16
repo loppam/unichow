@@ -2,43 +2,47 @@ importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js')
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.4.1/workbox-sw.js');
 
-// Initialize Firebase with your config
-firebase.initializeApp({
-  apiKey: "AIzaSyB0AEoFjTEtPnAdWRt5plOBvHcpQZDOI4I",
-  authDomain: "unichow-49eb7.firebaseapp.com",
-  projectId: "unichow-49eb7",
-  storageBucket: "unichow-49eb7.appspot.com",
-  messagingSenderId: "886342726459",
-  appId: "1:886342726459:web:b71e141a1a58085ba1bd1e",
-  measurementId: "G-S0863GBS9X"
-});
+async function fetchFirebaseConfig() {
+  const response = await fetch('/api/getFirebaseConfig');
+  if (!response.ok) {
+    throw new Error('Failed to fetch Firebase configuration');
+  }
+  return response.json();
+}
 
-const messaging = firebase.messaging();
+fetchFirebaseConfig().then(firebaseConfig => {
+  console.log("API Key:", firebaseConfig.apiKey);
+  firebase.initializeApp(firebaseConfig);
 
-// This will be replaced by the manifest at build time
-self.__WB_MANIFEST;
+  const messaging = firebase.messaging();
 
-workbox.core.clientsClaim();
-workbox.core.skipWaiting();
+  // Precaching configuration
+  workbox.precaching.precacheAndRoute([]);
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting());
-});
+  workbox.core.clientsClaim();
+  workbox.core.skipWaiting();
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
-});
+  self.addEventListener('install', (event) => {
+    event.waitUntil(self.skipWaiting());
+  });
 
-messaging.onBackgroundMessage((payload) => {
-  console.log('Received background message:', payload);
-  
-  const notificationTitle = payload.notification?.title || "New Notification";
-  const notificationOptions = {
-    body: payload.notification?.body,
-    icon: '/whitefavicon192x192.png',
-    badge: '/whitefavicon192x192.png',
-    data: payload.data
-  };
+  self.addEventListener('activate', (event) => {
+    event.waitUntil(self.clients.claim());
+  });
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  messaging.onBackgroundMessage((payload) => {
+    console.log('Received background message:', payload);
+    
+    const notificationTitle = payload.notification?.title || "New Notification";
+    const notificationOptions = {
+      body: payload.notification?.body,
+      icon: '/whitefavicon192x192.png',
+      badge: '/whitefavicon192x192.png',
+      data: payload.data
+    };
+
+    self.registration.showNotification(notificationTitle, notificationOptions);
+  });
+}).catch(error => {
+  console.error('Error initializing Firebase:', error);
 }); 

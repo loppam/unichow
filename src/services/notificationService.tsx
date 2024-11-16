@@ -37,7 +37,8 @@ class NotificationService {
     try {
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
-        throw new Error('Notification permission denied');
+        console.warn('Notification permission denied');
+        return null;
       }
 
       const token = await getToken(this.messaging!, {

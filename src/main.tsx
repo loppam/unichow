@@ -1,24 +1,20 @@
 import { BrowserRouter } from "react-router-dom";
 import { createRoot } from "react-dom/client";
+import { registerSW } from 'virtual:pwa-register';
 import App from "./App.tsx";
 import "./index.css";
 
 // Register service worker
 if ('serviceWorker' in navigator) {
-  try {
-    navigator.serviceWorker
-      .register('/firebase-messaging-sw.js', {
-        scope: '/'
-      })
-      .then((registration) => {
-        console.log('Service Worker registered:', registration);
-      })
-      .catch((error) => {
-        console.error('Service Worker registration failed:', error);
-      });
-  } catch (error) {
-    console.error('Service Worker registration error:', error);
-  }
+  registerSW({
+    immediate: true,
+    onRegisteredSW(swUrl, r) {
+      console.log('Service Worker registered:', swUrl, r);
+    },
+    onRegisterError(error) {
+      console.error('Service Worker registration failed:', error);
+    }
+  });
 }
 
 createRoot(document.getElementById("root")!).render(

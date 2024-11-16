@@ -12,6 +12,7 @@
     "vercel-build": "vite build"
   },
   "dependencies": {
+    "@rollup/plugin-replace": "^6.0.1",
     "@vercel/node": "^3.2.24",
     "algoliasearch": "^5.13.0",
     "chart.js": "^4.4.6",

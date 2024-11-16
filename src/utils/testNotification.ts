@@ -24,23 +24,18 @@ export async function testNotification(userId: string) {
       }),
     });
 
-    const responseText = await response.text();
-    console.log('Server response:', responseText);
-
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      console.error('Failed to parse response as JSON:', e);
-      throw new Error(`Server returned invalid JSON: ${responseText.substring(0, 100)}...`);
-    }
-    
     if (!response.ok) {
-      console.error('Notification API error:', data);
+      const data = await response.json();
       throw new Error(data.details || data.error || 'Failed to send test notification');
     }
 
-    return true;
+    try {
+      const data = await response.json();
+      return data.success;
+    } catch (error) {
+      console.error('Test notification failed:', error);
+      throw error;
+    }
   } catch (error) {
     console.error('Test notification failed:', error);
     throw error;

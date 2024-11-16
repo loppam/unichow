@@ -7,11 +7,15 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
       strategies: 'injectManifest',
-      srcDir: 'src',
-      filename: 'firebase-messaging-sw.ts',
-      injectRegister: false,
+      srcDir: 'public',
+      filename: 'firebase-messaging-sw.js',
+      injectRegister: 'auto',
+      registerType: 'autoUpdate',
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
+        cleanupOutdatedCaches: true
+      },
       manifest: {
         name: 'UniChow Food Delivery',
         short_name: 'UniChow',
@@ -35,9 +39,4 @@ export default defineConfig({
       },
     }),
   ],
-  server: {
-    headers: {
-      'Service-Worker-Allowed': '/',
-    },
-  },
 });

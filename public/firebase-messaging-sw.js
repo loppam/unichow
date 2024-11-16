@@ -1,5 +1,9 @@
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
+importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.4.1/workbox-sw.js');
+
+// This will be replaced by the manifest at build time
+self.__WB_MANIFEST;
 
 firebase.initializeApp({
   apiKey: "AIzaSyB0AEoFjTEtPnAdWRt5plOBvHcpQZDOI4I",
@@ -12,6 +16,11 @@ firebase.initializeApp({
 });
 
 const messaging = firebase.messaging();
+
+// Use workbox for precaching
+workbox.precaching.precacheAndRoute(self.__WB_MANIFEST);
+workbox.core.clientsClaim();
+workbox.core.skipWaiting();
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

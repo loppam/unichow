@@ -18,7 +18,7 @@ export default function Logo({ size = "md" }: LogoProps) {
   return (
     <div className={`rounded-full bg-black mx-auto w-fit ${containerSizes[size]}`}>
       <img 
-        src="/whitefavicon192x192.png" 
+        src="/public/whitefavicon192x192.png" 
         alt="logo" 
         className={sizes[size]} 
       />

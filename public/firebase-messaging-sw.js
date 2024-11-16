@@ -15,14 +15,8 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Handle precaching
-try {
-  // This will be replaced by the manifest at build time
-  self.__WB_MANIFEST;
-  workbox.precaching.precacheAndRoute(self.__WB_MANIFEST || []);
-} catch (error) {
-  console.warn('Precaching failed:', error);
-}
+// This will be replaced by the manifest at build time
+self.__WB_MANIFEST;
 
 workbox.core.clientsClaim();
 workbox.core.skipWaiting();

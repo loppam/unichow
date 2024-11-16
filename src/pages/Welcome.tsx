@@ -9,7 +9,7 @@ export default function Welcome() {
           <Truck className="w-16 h-16 text-white" />
         </div>
         <h1 className="text-3xl font-bold mb-2">UniChow</h1>
-        <div className="w-full flex gap-4 mt-8">
+        <div className="w-full flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-4 mt-8">
           <Link
             to="/login"
             className="flex-1 bg-gray-800 text-white py-3 rounded-lg text-center font-medium"

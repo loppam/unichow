@@ -5,7 +5,8 @@
       "src": "/firebase-messaging-sw.js",
       "headers": {
         "cache-control": "public, max-age=0, must-revalidate",
-        "Service-Worker-Allowed": "/"
+        "Service-Worker-Allowed": "/",
+        "content-type": "application/javascript; charset=utf-8"
       },
       "dest": "/firebase-messaging-sw.js"
     },
@@ -16,6 +17,13 @@
         "cache-control": "public, max-age=0, must-revalidate"
       },
       "dest": "/manifest.json"
+    },
+    {
+      "src": "/assets/(.*)",
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable"
+      },
+      "continue": true
     },
     {
       "src": "/api/(.*)",

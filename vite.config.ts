@@ -8,24 +8,36 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'robots.txt'], // adjust based on your project
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'firebase-messaging-sw.ts',
+      injectRegister: false,
       manifest: {
         name: 'UniChow Food Delivery',
         short_name: 'UniChow',
         theme_color: '#ffffff',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: '/whitefavicon192x192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: 'pwa-512x512.png',
+            src: '/whitefavicon512x512.png',
             sizes: '512x512',
             type: 'image/png',
           },
         ],
       },
+      devOptions: {
+        enabled: true,
+        type: 'module',
+      },
     }),
   ],
+  server: {
+    headers: {
+      'Service-Worker-Allowed': '/',
+    },
+  },
 });

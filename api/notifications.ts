@@ -1,8 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import admin from "firebase-admin";
+import { getApps, initializeApp, cert } from "firebase-admin/app";
+import { getMessaging } from "firebase-admin/messaging";
 
 // Initialize Firebase Admin if not already initialized
-if (!admin.apps.length) {
+if (!getApps().length) {
   try {
     admin.initializeApp({
       credential: admin.credential.cert({
@@ -19,8 +21,7 @@ if (!admin.apps.length) {
   }
 }
 
-// Use ES module export
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+const handler = async (req: VercelRequest, res: VercelResponse) => {
   // Add CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -63,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     };
 
-    const response = await admin.messaging().send(message);
+    const response = await getMessaging().send(message);
     return res.status(200).json({ success: true, messageId: response });
   } catch (error: any) {
     console.error('Error sending notification:', error);
@@ -72,4 +73,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       details: error.message
     });
   }
-}
+};
+
+export default handler;

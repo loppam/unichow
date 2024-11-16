@@ -5,9 +5,14 @@ import { getMessaging } from "firebase-admin/messaging";
 // Initialize Firebase Admin if not already initialized
 if (!getApps().length) {
   try {
+    // Check if running in production or development
+    const credential = process.env.GOOGLE_APPLICATION_CREDENTIALS
+      ? applicationDefault()
+      : require('../service-account.json'); // You'll need to add this file
+
     initializeApp({
-      credential: applicationDefault(),
-      projectId: process.env.VITE_FIREBASE_PROJECT_ID
+      credential: credential,
+      projectId: process.env.FIREBASE_PROJECT_ID // Remove VITE_ prefix
     });
   } catch (error) {
     console.error('Firebase Admin initialization error:', error);

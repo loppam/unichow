@@ -11,6 +11,14 @@
       "dest": "/firebase-messaging-sw.js"
     },
     {
+      "src": "/(.*)\\.png$",
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "image/png"
+      },
+      "dest": "/$1.png"
+    },
+    {
       "src": "/manifest.json",
       "headers": {
         "content-type": "application/manifest+json",

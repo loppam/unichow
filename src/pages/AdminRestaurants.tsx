@@ -115,12 +115,21 @@ export default function AdminRestaurants() {
     <div className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-3">
-          {restaurant.logo && (
+          {restaurant.logo ? (
             <img 
               src={restaurant.logo} 
               alt={restaurant.restaurantName}
               className="w-12 h-12 rounded-full object-cover"
+              onError={(e) => {
+                e.currentTarget.src = '/default-restaurant.png'; // Make sure this image exists in your public folder
+              }}
             />
+          ) : (
+            <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
+              <span className="text-gray-500 text-xl">
+                {restaurant.restaurantName.charAt(0)}
+              </span>
+            </div>
           )}
           <div>
             <h2 className="text-xl font-semibold">{restaurant.restaurantName}</h2>

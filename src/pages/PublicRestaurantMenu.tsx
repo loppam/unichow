@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { MenuItem, MenuCategory } from '../types/menu';
+import { Plus } from 'lucide-react';
+import { useCart } from '../contexts/CartContext';
 
 interface RestaurantData {
   restaurantName: string;
@@ -14,13 +16,28 @@ interface RestaurantData {
   phone: string;
 }
 
+interface CartItem extends MenuItem {
+  quantity: number;
+}
+
 export default function PublicRestaurantMenu() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [restaurant, setRestaurant] = useState<RestaurantData | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const { packs, addToCart, createNewPack } = useCart();
+  const navigate = useNavigate();
+  
+  // Get newPack from URL query params
+  const isNewPack = searchParams.get('newPack') === 'true';
+  
+  // Get existing packs for this restaurant
+  const restaurantPacks = packs.filter(pack => pack.restaurantId === id);
+  const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchRestaurantAndMenu = async () => {
@@ -28,24 +45,25 @@ export default function PublicRestaurantMenu() {
 
       try {
         setLoading(true);
-        // Fetch restaurant data
-        const restaurantDoc = await getDoc(doc(db, 'users', id));
+        // Change from 'users' to 'restaurants' collection
+        const restaurantDoc = await getDoc(doc(db, 'restaurants', id));
         if (!restaurantDoc.exists()) {
           setError('Restaurant not found');
           return;
         }
         setRestaurant(restaurantDoc.data() as RestaurantData);
 
-        // Fetch menu categories
-        const categoriesSnapshot = await getDocs(collection(db, `users/${id}/categories`));
+        // Update these paths as well
+        const categoriesSnapshot = await getDocs(collection(db, `restaurants/${id}/categories`));
+        const menuSnapshot = await getDocs(collection(db, `restaurants/${id}/menu`));
+
+        // Rest of your code remains the same
         const categoriesData = categoriesSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as MenuCategory[];
         setCategories(categoriesData);
 
-        // Fetch menu items
-        const menuSnapshot = await getDocs(collection(db, `users/${id}/menu`));
         const menuData = menuSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
@@ -62,6 +80,50 @@ export default function PublicRestaurantMenu() {
 
     fetchRestaurantAndMenu();
   }, [id]);
+
+  useEffect(() => {
+    if (categories.length > 0) {
+      setSelectedCategory(categories[0].id);
+    }
+  }, [categories]);
+
+  useEffect(() => {
+    // If it's a new pack, create it and select it
+    if (isNewPack && restaurant) {
+      const newPackId = createNewPack(id!, restaurant.restaurantName);
+      setSelectedPackId(newPackId);
+    }
+    // If there's only one pack, select it by default
+    else if (restaurantPacks.length === 1) {
+      setSelectedPackId(restaurantPacks[0].id);
+    }
+  }, [isNewPack, id, restaurant]);
+
+  const handleAddToCart = (item: MenuItem) => {
+    if (!restaurant) return;
+    
+    if (!selectedPackId) {
+      // If no pack is selected, create a new one
+      const newPackId = createNewPack(id!, restaurant.restaurantName);
+      addToCart({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        restaurantId: id!,
+        restaurantName: restaurant.restaurantName,
+      }, newPackId);
+      setSelectedPackId(newPackId);
+    } else {
+      // Add to selected pack
+      addToCart({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        restaurantId: id!,
+        restaurantName: restaurant.restaurantName,
+      }, selectedPackId);
+    }
+  };
 
   if (loading) {
     return (
@@ -101,37 +163,97 @@ export default function PublicRestaurantMenu() {
         </div>
       </div>
 
-      {/* Menu Categories and Items */}
-      <div className="max-w-4xl mx-auto p-6">
-        {categories.map(category => (
-          <div key={category.id} className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">{category.name}</h2>
-            <div className="grid gap-4 md:grid-cols-2">
-              {menuItems
-                .filter(item => item.category === category.id)
-                .map(item => (
-                  <div key={item.id} className="bg-white p-4 rounded-lg shadow-sm">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-medium">{item.name}</h3>
-                        <p className="text-sm text-gray-600 mt-1">{item.description}</p>
-                      </div>
-                      <div className="text-lg font-medium">
-                        ${item.price.toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+      {/* Pack Selection */}
+      {restaurantPacks.length > 1 && (
+        <div className="bg-white shadow-sm p-4 sticky top-0 z-20">
+          <div className="max-w-4xl mx-auto">
+            <label className="text-sm font-medium text-gray-700">Select Pack:</label>
+            <div className="mt-2 flex gap-2 overflow-x-auto no-scrollbar">
+              {restaurantPacks.map((pack, index) => (
+                <button
+                  key={pack.id}
+                  onClick={() => setSelectedPackId(pack.id)}
+                  className={`px-4 py-2 rounded-full text-sm whitespace-nowrap ${
+                    selectedPackId === pack.id
+                      ? 'bg-black text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  Pack {index + 1} ({pack.items.length} items)
+                </button>
+              ))}
+              <button
+                onClick={() => navigate(`/restaurant/${id}?newPack=true`)}
+                className="px-4 py-2 rounded-full text-sm whitespace-nowrap bg-gray-100 text-gray-600 hover:bg-gray-200"
+              >
+                + New Pack
+              </button>
             </div>
           </div>
-        ))}
+        </div>
+      )}
 
-        {categories.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            No menu items available
+      {/* Categories Navigation */}
+      <div className="sticky top-0 bg-white shadow-sm z-10">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex overflow-x-auto no-scrollbar">
+            {categories.map(category => (
+              <button
+                key={category.id}
+                onClick={() => setSelectedCategory(category.id)}
+                className={`px-4 py-3 whitespace-nowrap ${
+                  selectedCategory === category.id
+                    ? 'text-black border-b-2 border-black'
+                    : 'text-gray-500 hover:text-black'
+                }`}
+              >
+                {category.name}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Menu Items */}
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="grid gap-4 md:grid-cols-2">
+          {menuItems
+            .filter(item => item.category === selectedCategory)
+            .map(item => (
+              <div key={item.id} className="bg-white p-4 rounded-lg shadow-sm">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-medium">{item.name}</h3>
+                    <p className="text-sm text-gray-600 mt-1">{item.description}</p>
+                    <p className="text-lg font-medium mt-2">₦{item.price.toLocaleString()}</p>
+                  </div>
+                  <button
+                    onClick={() => handleAddToCart(item)}
+                    className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-full hover:bg-gray-800"
+                  >
+                    <Plus size={20} />
+                  </button>
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* Cart Button */}
+      {packs.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+          <div className="max-w-4xl mx-auto">
+            <button
+              onClick={() => navigate('/cart')}
+              className="w-full bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-800"
+            >
+              View Cart ({packs.reduce((acc, pack) => 
+                acc + pack.items.reduce((itemAcc, item) => itemAcc + item.quantity, 0), 0
+              )} items)
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

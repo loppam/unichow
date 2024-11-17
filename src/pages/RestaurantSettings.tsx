@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { db } from "../firebase/config";
+import { db, auth } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
 import RestaurantNavigation from "../components/RestaurantNavigation";
-import { Save } from "lucide-react";
+import { Save, LogOut } from "lucide-react";
+import { signOut } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 
 interface RestaurantSettings {
   restaurantName: string;
@@ -17,6 +19,7 @@ interface RestaurantSettings {
 
 export default function RestaurantSettings() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [settings, setSettings] = useState<RestaurantSettings>({
     restaurantName: "",
     description: "",
@@ -80,6 +83,16 @@ export default function RestaurantSettings() {
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      navigate('/login');
+    } catch (error) {
+      console.error("Error signing out:", error);
+      setError("Failed to sign out");
+    }
+  };
+
   if (loading) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-gray-500">Loading settings...</div>
@@ -88,8 +101,15 @@ export default function RestaurantSettings() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="bg-white p-4 shadow-sm">
+      <div className="bg-white p-4 shadow-sm flex justify-between items-center">
         <h1 className="text-xl font-semibold">Restaurant Settings</h1>
+        <button
+          onClick={handleSignOut}
+          className="flex items-center gap-2 text-red-600 hover:text-red-700 transition-colors"
+        >
+          <LogOut className="w-5 h-5" />
+          <span>Sign Out</span>
+        </button>
       </div>
 
       <div className="p-4 max-w-md mx-auto">

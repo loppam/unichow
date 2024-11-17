@@ -29,6 +29,7 @@ import AdminLayout from './components/AdminLayout';
 import AdminOrders from './pages/admin/AdminOrders';
 import UserManagement from './pages/admin/UserManagement';
 import VerificationReview from './pages/admin/VerificationReview';
+import PublicRestaurantMenu from './pages/PublicRestaurantMenu';
 
 function App() {
   return (
@@ -176,6 +177,9 @@ function App() {
                     </AdminRoute>
                   } />
                 </Route>
+
+                {/* Public restaurant menu route */}
+                <Route path="/restaurant/:id" element={<PublicRestaurantMenu />} />
               </Routes>
             </NotificationProvider>
           </AdminProvider>

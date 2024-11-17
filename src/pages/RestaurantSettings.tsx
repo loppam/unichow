@@ -10,12 +10,14 @@ import { useNavigate } from "react-router-dom";
 interface RestaurantSettings {
   restaurantName: string;
   description: string;
-  cuisine: string;
+  cuisineTypes: string[];
   openingHours: string;
   closingHours: string;
   address: string;
   phone: string;
 }
+
+const CUISINE_TYPES = ["Pastries", "Smoothies", "Fast Food"];
 
 export default function RestaurantSettings() {
   const { user } = useAuth();
@@ -23,7 +25,7 @@ export default function RestaurantSettings() {
   const [settings, setSettings] = useState<RestaurantSettings>({
     restaurantName: "",
     description: "",
-    cuisine: "",
+    cuisineTypes: [],
     openingHours: "",
     closingHours: "",
     address: "",
@@ -59,6 +61,23 @@ export default function RestaurantSettings() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setSettings(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleCuisineChange = (cuisine: string) => {
+    setSettings(prev => {
+      const cuisineTypes = prev.cuisineTypes || [];
+      if (cuisineTypes.includes(cuisine)) {
+        return {
+          ...prev,
+          cuisineTypes: cuisineTypes.filter(type => type !== cuisine)
+        };
+      } else {
+        return {
+          ...prev,
+          cuisineTypes: [...cuisineTypes, cuisine]
+        };
+      }
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -157,17 +176,25 @@ export default function RestaurantSettings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cuisine Type
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cuisine Types
                 </label>
-                <input
-                  type="text"
-                  name="cuisine"
-                  value={settings.cuisine}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  {CUISINE_TYPES.map(cuisine => (
+                    <button
+                      key={cuisine}
+                      type="button"
+                      onClick={() => handleCuisineChange(cuisine)}
+                      className={`p-2 rounded-lg border text-sm text-left transition-colors ${
+                        settings.cuisineTypes?.includes(cuisine)
+                          ? 'bg-black text-white border-black'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      {cuisine}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

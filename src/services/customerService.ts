@@ -2,6 +2,7 @@ import { db } from '../firebase/config';
 import { collection, doc, setDoc, updateDoc, getDoc, query, where, getDocs, addDoc, deleteDoc } from 'firebase/firestore';
 import { CustomerProfile } from '../types/customer';
 import { Review } from '../types/review';
+import { Address } from '../types/order';
 
 export const customerService = {
   async updateProfile(customerId: string, data: Partial<CustomerProfile>) {
@@ -34,5 +35,59 @@ export const customerService = {
       customerId,           
       createdAt: new Date().toISOString()
     });
+  },
+
+  async getSavedAddresses(customerId: string): Promise<Address[]> {
+    try {
+      const docRef = doc(db, 'customers', customerId);
+      const docSnap = await getDoc(docRef);
+      const data = docSnap.data();
+      return data?.savedAddresses || [];
+    } catch (error) {
+      console.error('Error fetching saved addresses:', error);
+      return [];
+    }
+  },
+
+  async saveAddress(customerId: string, address: Address): Promise<void> {
+    try {
+      const docRef = doc(db, 'customers', customerId);
+      const docSnap = await getDoc(docRef);
+      
+      if (!docSnap.exists()) {
+        // Create the customer document if it doesn't exist
+        await setDoc(docRef, {
+          savedAddresses: [{ ...address, id: Date.now().toString() }]
+        });
+      } else {
+        const currentData = docSnap.data();
+        const currentAddresses = currentData?.savedAddresses || [];
+        
+        await updateDoc(docRef, {
+          savedAddresses: [...currentAddresses, { ...address, id: Date.now().toString() }]
+        });
+      }
+    } catch (error) {
+      console.error('Error saving address:', error);
+      throw new Error('Failed to save address');
+    }
+  },
+
+  async getInitialAddress(userId: string): Promise<Address | null> {
+    try {
+      const userDoc = await getDoc(doc(db, "users", userId));
+      const userData = userDoc.data();
+      
+      if (userData?.address) {
+        return {
+          address: userData.address,
+          additionalInstructions: ''
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching initial address:', error);
+      return null;
+    }
   }
 }; 

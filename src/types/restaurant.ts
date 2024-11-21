@@ -23,6 +23,7 @@ export interface RestaurantProfile {
   createdAt: string;
   updatedAt: string;
   lastUpdated?: string;
+  paystackSubaccountCode: string;
 }
 
 export interface RestaurantRegistrationData {
@@ -36,6 +37,8 @@ export interface RestaurantRegistrationData {
   cuisine?: string[];
   openingHours?: string;
   closingHours?: string;
+  minimumOrder: number;
+  bankDetails: BankDetails;
 }
 
 export interface RestaurantUpdateData {
@@ -71,4 +74,30 @@ export interface MenuItem {
   allergens?: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BankDetails {
+  business_name: string;
+  settlement_bank: string;
+  account_number: string;
+  percentage_charge: number;
+}
+
+export interface RestaurantPaymentInfo {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  paystackSubaccountCode?: string;
+  paystackRecipientCode?: string;
+  settlementSchedule: 'daily' | 'weekly' | 'monthly';
+  isVerified: boolean;
+  lastUpdated: string;
+}
+
+export interface Restaurant extends RestaurantProfile {
+  paymentInfo?: RestaurantPaymentInfo;
+}
+
+export interface RestaurantData extends RestaurantProfile {
+  paymentInfo?: RestaurantPaymentInfo;
 } 

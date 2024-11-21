@@ -3,6 +3,8 @@ import { collection, query, where, getDocs, Timestamp, getDoc, doc } from "fireb
 import { db } from "../../firebase/config";
 import { Users, ShoppingBag, TrendingUp, DollarSign } from "lucide-react";
 import { auth } from "../../firebase/config";
+import { adminSettingsService } from "../../services/adminSettingsService";
+import { toast } from "react-hot-toast";
 
 interface AnalyticsData {
   totalRestaurants: number;
@@ -26,6 +28,11 @@ interface Order {
   createdAt: Timestamp | string;
   total?: number;
   status: string;
+}
+
+interface DeliverySettings {
+  freeDeliveryThreshold: number;
+  baseDeliveryFee: number;
 }
 
 async function fetchAnalytics(): Promise<AnalyticsData> {
@@ -105,6 +112,11 @@ export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>({
+    freeDeliveryThreshold: 5000,
+    baseDeliveryFee: 500
+  });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -133,6 +145,60 @@ export default function AdminDashboard() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const checkAdminAndFetchSettings = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser?.uid || ''));
+        const userData = userDoc.data();
+        
+        if (!userData || (userData.role !== 'admin' && userData.role !== 'superadmin')) {
+          toast.error('Unauthorized: Admin access required');
+          return;
+        }
+
+        const settings = await adminSettingsService.getDeliverySettings();
+        if (settings) {
+          setDeliverySettings(settings);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        toast.error('Failed to load delivery settings');
+      }
+    };
+
+    if (auth.currentUser) {
+      checkAdminAndFetchSettings();
+    }
+  }, []);
+
+  const handleDeliverySettingsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setDeliverySettings(prev => ({
+      ...prev,
+      [name]: Number(value)
+    }));
+  };
+
+  const handleDeliverySettingsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSaving(true);
+      await adminSettingsService.updateDeliverySettings(deliverySettings);
+      toast.success('Delivery settings updated successfully');
+    } catch (error) {
+      console.error('Error updating delivery settings:', error);
+      if (error instanceof Error) {
+        if (error.message.includes('Admin privileges')) {
+          toast.error('You need admin privileges to update these settings');
+        } else {
+          toast.error('Failed to update delivery settings');
+        }
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -228,6 +294,58 @@ export default function AdminDashboard() {
             <p className="text-gray-500">Rejected</p>
           </div>
         </div>
+      </div>
+
+      {/* Delivery Settings */}
+      <div className="bg-white p-6 rounded-lg shadow-sm">
+        <h2 className="text-lg font-semibold mb-4">
+          Delivery Settings
+        </h2>
+        <form onSubmit={handleDeliverySettingsSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Free Delivery Threshold (₦)
+              </label>
+              <input
+                type="number"
+                name="freeDeliveryThreshold"
+                value={deliverySettings.freeDeliveryThreshold}
+                onChange={handleDeliverySettingsChange}
+                min="0"
+                step="500"
+                className="w-full p-2 border rounded-lg"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Base Delivery Fee (₦)
+              </label>
+              <input
+                type="number"
+                name="baseDeliveryFee"
+                value={deliverySettings.baseDeliveryFee}
+                onChange={handleDeliverySettingsChange}
+                min="0"
+                step="100"
+                className="w-full p-2 border rounded-lg"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-400"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

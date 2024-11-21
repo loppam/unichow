@@ -10,8 +10,7 @@ import Logo from "../components/Logo";
 import Input from "../components/Input";
 import { ArrowLeft, Store, User as UserIcon } from "lucide-react"; // Import icons
 
-// First, let's define the cuisine types (can be moved to a constants file)
-const CUISINE_TYPES = ["Pastries", "Bakery", "Fast Food"];
+const CUISINE_TYPES = ["Pastries", "Smoothies", "Fast Food"];
 
 export default function Register() {
   const [userType, setUserType] = useState<"user" | "restaurant" | null>(null);
@@ -29,6 +28,7 @@ export default function Register() {
     cuisineTypes: [] as string[],
     openingHours: "",
     closingHours: "",
+    minimumOrder: 0,
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -135,6 +135,20 @@ export default function Register() {
       navigate(
         userType === "restaurant" ? "/restaurant-verify-email" : "/verify-email"
       );
+
+      if (userType === "user") {
+        // Create initial customer document
+        await setDoc(doc(db, "customers", userCredential.user.uid), {
+          email: formData.email,
+          name: `${formData.firstName} ${formData.lastName}`,
+          phone: formData.phone,
+          savedAddresses: [{
+            id: Date.now().toString(),
+            address: formData.address,
+            additionalInstructions: ''
+          }]
+        });
+      }
     } catch (err) {
       console.error("Registration error:", err);
       if (err instanceof Error) {
@@ -351,6 +365,25 @@ export default function Register() {
                   </div>
                 </div>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Minimum Order Amount (₦) *
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    name="minimumOrder"
+                    value={formData.minimumOrder}
+                    onChange={handleChange}
+                    className="w-full p-2 border rounded-lg"
+                    min="0"
+                    step="100"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Minimum amount customers must order</p>
+              </div>
             </>
           ) : null}
 
@@ -400,7 +433,7 @@ export default function Register() {
           )}
           <Input
             name="address"
-            placeholder="Address"
+            placeholder="Full Address"
             value={formData.address}
             onChange={handleChange}
             required

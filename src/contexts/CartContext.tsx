@@ -14,6 +14,7 @@ interface Pack {
   id: string;
   restaurantId: string;
   restaurantName: string;
+  paystackSubaccountCode: string;
   items: CartItem[];
 }
 
@@ -39,29 +40,36 @@ export function CartProvider({ children }: { children: ReactNode }) {
       id: newPackId,
       restaurantId,
       restaurantName,
+      paystackSubaccountCode: '',
       items: []
     }]);
     return newPackId;
   };
 
-  const addToCart = (item: Omit<CartItem, 'quantity' | 'packId'>, packId?: string) => {
+  const addToCart = (newItem: Omit<CartItem, 'quantity' | 'packId'>, packId?: string) => {
+    // Check if cart has items from a different restaurant
+    if (packs.length > 0 && packs[0].restaurantId !== newItem.restaurantId) {
+      alert("You can only order from one restaurant at a time. Please complete or clear your current order first.");
+      return;
+    }
+    
     setPacks(prevPacks => {
       // If packId is provided, add to specific pack
       if (packId) {
         return prevPacks.map(pack => {
           if (pack.id === packId) {
-            const existingItem = pack.items.find(i => i.id === item.id);
+            const existingItem = pack.items.find(i => i.id === newItem.id);
             if (existingItem) {
               return {
                 ...pack,
                 items: pack.items.map(i =>
-                  i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+                  i.id === newItem.id ? { ...i, quantity: i.quantity + 1 } : i
                 )
               };
             }
             return {
               ...pack,
-              items: [...pack.items, { ...item, quantity: 1, packId }]
+              items: [...pack.items, { ...newItem, quantity: 1, packId }]
             };
           }
           return pack;
@@ -72,9 +80,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const newPackId = crypto.randomUUID();
       const newPack: Pack = {
         id: newPackId,
-        restaurantId: item.restaurantId,
-        restaurantName: item.restaurantName,
-        items: [{ ...item, quantity: 1, packId: newPackId }]
+        restaurantId: newItem.restaurantId,
+        restaurantName: newItem.restaurantName,
+        paystackSubaccountCode: '',
+        items: [{ ...newItem, quantity: 1, packId: newPackId }]
       };
       return [...prevPacks, newPack];
     });

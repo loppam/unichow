@@ -22,13 +22,13 @@ export default function Checkout() {
         <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
           <h2 className="font-semibold mb-4">Delivery Address</h2>
           <Input
-            label="Address"
-            placeholder="Enter your delivery address"
+            label="Delivery Address"
+            placeholder="Enter your full delivery address"
             className="mb-2"
           />
           <Input
             label="Additional Instructions"
-            placeholder="Any specific instructions for delivery"
+            placeholder="Any specific instructions for delivery (optional)"
           />
         </div>
 

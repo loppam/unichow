@@ -85,13 +85,15 @@ export default function RestaurantDashboard() {
                 price: 0,
                 category: "",
                 image: "",
-                available: true,
+                isAvailable: true,
                 preparationTime: 0,
                 allergens: [],
                 orderCount: count,
                 spicyLevel: 0,
                 vegetarian: false,
                 featured: false,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
               } as MenuItem)
           );
 
@@ -129,7 +131,7 @@ export default function RestaurantDashboard() {
     },
     {
       title: "Today's Revenue",
-      value: `$${stats.todayRevenue.toFixed(2)}`,
+      value: `₦${stats.todayRevenue.toFixed(2)}`,
       icon: DollarSign,
       color: "bg-green-500",
     },
@@ -188,7 +190,7 @@ export default function RestaurantDashboard() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">${order.total.toFixed(2)}</p>
+                      <p className="font-medium">₦{order.total.toFixed(2)}</p>
                       <p className="text-sm text-gray-500">
                         {new Date(order.createdAt).toLocaleTimeString()}
                       </p>

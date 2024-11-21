@@ -1,63 +1,57 @@
-import { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../firebase/config';
-import BottomNav from '../components/BottomNav';
-import RestaurantCard from '../components/RestaurantCard';
-
-interface Restaurant {
-  id: string;
-  restaurantName: string;
-  image: string;
-  isApproved: boolean;
-  rating: number;
-  deliveryTime: string;
-  minOrder: number;
-}
+import { useState, useEffect } from "react";
+import { Search } from "lucide-react";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../firebase/config";
+import BottomNav from "../components/BottomNav";
+import RestaurantCard from "../components/RestaurantCard";
+import { RestaurantProfile } from "../types/restaurant";
 
 export default function Home() {
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [restaurants, setRestaurants] = useState<RestaurantProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    loadRestaurants();
-  }, []);
-
-  const loadRestaurants = async () => {
-    try {
+    const fetchRestaurants = async () => {
       setLoading(true);
-      const restaurantsRef = collection(db, 'restaurants');
-      const q = query(
-        restaurantsRef,
-        where('isApproved', '==', true)
-      );
-      
-      const snapshot = await getDocs(q);
-      const restaurantData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Restaurant[];
+      try {
+        const restaurantsRef = collection(db, "restaurants");
+        const q = query(
+          restaurantsRef,
+          where("isApproved", "==", true),
+          where("status", "==", "approved")
+        );
 
-      restaurantData.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-      
-      const topRestaurants = restaurantData.slice(0, 5);
+        const querySnapshot = await getDocs(q);
+        const restaurantData = querySnapshot.docs.map((doc) => {
+          const data = {
+            id: doc.id,
+            ...doc.data(),
+          } as RestaurantProfile;
+          return data;
+        });
 
-      setRestaurants(topRestaurants);
-    } catch (err) {
-      setError('Failed to load restaurants');
-      console.error('Error loading restaurants:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+        setRestaurants(restaurantData);
+      } catch (err) {
+        console.error("Error fetching restaurants:", err);
+        setError("Failed to load restaurants");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRestaurants();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <header className="bg-white p-4 sticky top-0 z-10 shadow-sm">
         <div className="max-w-md mx-auto">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            <Search
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              size={20}
+            />
             <input
               type="search"
               placeholder="Search restaurants"
@@ -74,22 +68,22 @@ export default function Home() {
             {error}
           </div>
         )}
-        
+
         {loading ? (
           <div className="flex justify-center items-center h-48">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
           </div>
         ) : (
           <div className="space-y-4">
-            {restaurants.map(restaurant => (
-              <RestaurantCard 
+            {restaurants.map((restaurant) => (
+              <RestaurantCard
                 key={restaurant.id}
                 id={restaurant.id}
                 name={restaurant.restaurantName}
-                image={restaurant.image}
+                image={restaurant.logo || ""}
                 rating={restaurant.rating}
-                deliveryTime={restaurant.deliveryTime}
-                minOrder={`₦${restaurant.minOrder}`}
+                deliveryTime={`${restaurant.openingHours} - ${restaurant.closingHours}`}
+                minimumOrder={restaurant.minimumOrder || 0}
               />
             ))}
           </div>

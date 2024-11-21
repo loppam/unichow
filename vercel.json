@@ -19,6 +19,14 @@
       "dest": "/$1.png"
     },
     {
+      "src": "/(.*)\\.(?:jpg|jpeg)$",
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "image/jpeg"
+      },
+      "dest": "/$1.jpg"
+    },
+    {
       "src": "/manifest.json",
       "headers": {
         "content-type": "application/manifest+json",

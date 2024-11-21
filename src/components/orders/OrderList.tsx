@@ -1,7 +1,10 @@
-import React from 'react';
 import { Order, OrderStatus } from '../../types/order';
 import { formatDistanceToNow } from 'date-fns';
 import { Clock, CheckCircle, XCircle } from 'lucide-react';
+
+const formatAddress = (address: string) => {
+  return address.replace(/\n/g, ', ');
+};
 
 interface OrderListProps {
   orders: Order[];
@@ -101,11 +104,13 @@ export default function OrderList({
 
           <div className="mb-2">
             <h3 className="font-medium">{order.customerName}</h3>
-            <p className="text-sm text-gray-600 truncate">{order.deliveryAddress}</p>
+            <p className="text-sm text-gray-600 truncate">
+              {formatAddress(order.deliveryAddress.address)}
+            </p>
           </div>
 
           <div className="text-sm text-gray-600">
-            {order.items.length} items · ${order.total.toFixed(2)}
+            {order.items.length} items · ₦{order.total.toFixed(2)}
           </div>
 
           {order.estimatedDeliveryTime && (

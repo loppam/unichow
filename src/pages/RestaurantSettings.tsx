@@ -1,51 +1,73 @@
-import React, { useState, useEffect } from "react";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { useState, useEffect } from "react";
+import { doc, getDoc } from "firebase/firestore";
 import { db, auth } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
 import RestaurantNavigation from "../components/RestaurantNavigation";
-import { Save, LogOut } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
+import PaymentSetup from '../components/restaurant/PaymentSetup';
+import ProfileDetails from '../components/restaurant/settings/ProfileDetails';
+import BusinessHours from '../components/restaurant/settings/BusinessHours';
+import DeliverySettings from '../components/restaurant/settings/DeliverySettings';
+import { ChevronDown } from 'lucide-react';
 
-interface RestaurantSettings {
+interface RestaurantData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
   restaurantName: string;
   description: string;
-  cuisineTypes: string[];
+  cuisine: string[];
+  address: {
+    address: string;
+    additionalInstructions: string;
+  };
+  minimumOrder: number;
   openingHours: string;
   closingHours: string;
-  address: string;
-  phone: string;
+  logo?: string;
+  bannerImage?: string;
+  profileComplete: boolean;
+  status: 'pending' | 'approved' | 'rejected' | 'suspended';
+  isApproved: boolean;
+  rating: number;
+  totalOrders: number;
+  createdAt: string;
+  updatedAt: string;
+  lastUpdated?: string;
+  paystackSubaccountCode: string;
+  paymentInfo?: {
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+    paystackSubaccountCode?: string;
+    paystackRecipientCode?: string;
+    settlementSchedule: 'daily' | 'weekly' | 'monthly';
+    isVerified: boolean;
+    lastUpdated: string;
+  };
 }
-
-const CUISINE_TYPES = ["Pastries", "Smoothies", "Fast Food"];
 
 export default function RestaurantSettings() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [settings, setSettings] = useState<RestaurantSettings>({
-    restaurantName: "",
-    description: "",
-    cuisineTypes: [],
-    openingHours: "",
-    closingHours: "",
-    address: "",
-    phone: "",
-  });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [restaurantData, setRestaurantData] = useState<RestaurantData | null>(null);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [activeSection, setActiveSection] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSettings = async () => {
       if (!user) return;
 
       try {
-        const docRef = doc(db, "users", user.uid);
+        const docRef = doc(db, "restaurants", user.uid);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-          setSettings(docSnap.data() as RestaurantSettings);
+          setRestaurantData(docSnap.data() as RestaurantData);
         }
       } catch (err) {
         console.error("Error fetching settings:", err);
@@ -58,50 +80,6 @@ export default function RestaurantSettings() {
     fetchSettings();
   }, [user]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setSettings(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleCuisineChange = (cuisine: string) => {
-    setSettings(prev => {
-      const cuisineTypes = prev.cuisineTypes || [];
-      if (cuisineTypes.includes(cuisine)) {
-        return {
-          ...prev,
-          cuisineTypes: cuisineTypes.filter(type => type !== cuisine)
-        };
-      } else {
-        return {
-          ...prev,
-          cuisineTypes: [...cuisineTypes, cuisine]
-        };
-      }
-    });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-
-    setSaving(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      await updateDoc(doc(db, "users", user.uid), {
-        ...settings,
-        lastUpdated: new Date().toISOString(),
-      });
-      setSuccess("Settings updated successfully");
-    } catch (err) {
-      console.error("Error updating settings:", err);
-      setError("Failed to update settings");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -112,163 +90,88 @@ export default function RestaurantSettings() {
     }
   };
 
-  if (loading) {
-    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-gray-500">Loading settings...</div>
-    </div>;
+  const toggleSection = (section: string) => {
+    setActiveSection(activeSection === section ? null : section);
+  };
+
+  if (loading || error || !restaurantData) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <RestaurantNavigation />
+        <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+          {loading && <div className="text-gray-500">Loading settings...</div>}
+          {error && <div className="text-red-500">{error}</div>}
+          {!restaurantData && <div className="text-gray-500">No restaurant data found</div>}
+        </div>
+      </div>
+    );
   }
 
+  const sections = [
+    {
+      id: 'profile',
+      title: 'Profile Details',
+      component: <ProfileDetails data={restaurantData} />
+    },
+    {
+      id: 'hours',
+      title: 'Business Hours',
+      component: <BusinessHours data={restaurantData} />
+    },
+    {
+      id: 'payment',
+      title: 'Payment Settings',
+      component: <PaymentSetup data={restaurantData} />
+    },
+    {
+      id: 'delivery',
+      title: 'Delivery Settings',
+      component: <DeliverySettings data={restaurantData} />
+    }
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="bg-white p-4 shadow-sm flex justify-between items-center">
-        <h1 className="text-xl font-semibold">Restaurant Settings</h1>
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-2 text-red-600 hover:text-red-700 transition-colors"
-        >
-          <LogOut className="w-5 h-5" />
-          <span>Sign Out</span>
-        </button>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <RestaurantNavigation />
+      
+      <div className="max-w-4xl mx-auto py-6 space-y-4 px-4 pb-20">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        </div>
 
-      <div className="p-4 max-w-md mx-auto">
-        {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-4">
-            {success}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Restaurant Name
-                </label>
-                <input
-                  type="text"
-                  name="restaurantName"
-                  value={settings.restaurantName}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  name="description"
-                  value={settings.description}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded-lg"
-                  rows={3}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cuisine Types
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {CUISINE_TYPES.map(cuisine => (
-                    <button
-                      key={cuisine}
-                      type="button"
-                      onClick={() => handleCuisineChange(cuisine)}
-                      className={`p-2 rounded-lg border text-sm text-left transition-colors ${
-                        settings.cuisineTypes?.includes(cuisine)
-                          ? 'bg-black text-white border-black'
-                          : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      {cuisine}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Opening Time
-                  </label>
-                  <input
-                    type="time"
-                    name="openingHours"
-                    value={settings.openingHours}
-                    onChange={handleChange}
-                    className="w-full p-2 border rounded-lg"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Closing Time
-                  </label>
-                  <input
-                    type="time"
-                    name="closingHours"
-                    value={settings.closingHours}
-                    onChange={handleChange}
-                    className="w-full p-2 border rounded-lg"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Address
-                </label>
-                <input
-                  type="text"
-                  name="address"
-                  value={settings.address}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={settings.phone}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
+        {sections.map(section => (
+          <div key={section.id} className="bg-white rounded-lg shadow">
+            <button
+              onClick={() => toggleSection(section.id)}
+              className="w-full p-6 flex justify-between items-center border-b hover:bg-gray-50"
+            >
+              <h2 className="text-xl font-semibold">{section.title}</h2>
+              <ChevronDown
+                className={`transform transition-transform ${
+                  activeSection === section.id ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+            <div
+              className={`transition-all duration-200 ease-in-out overflow-hidden ${
+                activeSection === section.id ? 'max-h-[1000px]' : 'max-h-0'
+              }`}
+            >
+              {section.component}
             </div>
           </div>
+        ))}
 
+        {/* Sign Out Button */}
+        <div className="flex justify-end">
           <button
-            type="submit"
-            disabled={saving}
-            className="w-full bg-black text-white py-3 rounded-lg flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleSignOut}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
           >
-            <Save className="w-5 h-5" />
-            {saving ? "Saving..." : "Save Changes"}
+            Sign Out
           </button>
-        </form>
+        </div>
       </div>
-
-      <RestaurantNavigation />
     </div>
   );
 } 

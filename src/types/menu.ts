@@ -9,6 +9,7 @@ export interface MenuItem {
   createdAt: string;
   updatedAt: string;
   preparationTime: number;
+  orderCount?: number;
 }
 
 export interface MenuCategory {

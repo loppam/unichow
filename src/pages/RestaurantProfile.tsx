@@ -40,11 +40,8 @@ export default function RestaurantProfile() {
     description: '',
     cuisine: [],
     address: {
-      street: '',
-      city: '',
-      state: '',
-      country: '',
-      postalCode: ''
+      address: '',
+      additionalInstructions: ''
     },
     phone: '',
     email: '',
@@ -125,11 +122,8 @@ export default function RestaurantProfile() {
           restaurantName: formData.get('restaurantName') as string,
           description: formData.get('description') as string,
           address: {
-            street: formData.get('address.street') as string,
-            city: formData.get('address.city') as string,
-            state: formData.get('address.state') as string,
-            country: formData.get('address.country') as string,
-            postalCode: formData.get('address.postalCode') as string,
+            address: formData.get('address') as string,
+            additionalInstructions: formData.get('addressInstructions') as string
           },
           phone: formData.get('phone') as string,
           openingHours: formData.get('openingHours') as string,
@@ -193,54 +187,23 @@ export default function RestaurantProfile() {
             <div className="md:col-span-2">
               <div className="space-y-4">
                 <FormField
-                  label="Street"
-                  name="address.street"
-                  value={profile.address.street}
+                  label="Address"
+                  name="address"
+                  value={profile.address.address}
                   onChange={(value) => setProfile(p => ({ 
                     ...p, 
-                    address: { ...p.address, street: value }
+                    address: { ...p.address, address: value }
                   }))}
                   required
                 />
                 <FormField
-                  label="City"
-                  name="address.city"
-                  value={profile.address.city}
+                  label="Additional Instructions"
+                  name="addressInstructions"
+                  value={profile.address.additionalInstructions || ''}
                   onChange={(value) => setProfile(p => ({ 
                     ...p, 
-                    address: { ...p.address, city: value }
+                    address: { ...p.address, additionalInstructions: value }
                   }))}
-                  required
-                />
-                <FormField
-                  label="State"
-                  name="address.state"
-                  value={profile.address.state}
-                  onChange={(value) => setProfile(p => ({ 
-                    ...p, 
-                    address: { ...p.address, state: value }
-                  }))}
-                  required
-                />
-                <FormField
-                  label="Country"
-                  name="address.country"
-                  value={profile.address.country}
-                  onChange={(value) => setProfile(p => ({ 
-                    ...p, 
-                    address: { ...p.address, country: value }
-                  }))}
-                  required
-                />
-                <FormField
-                  label="Postal Code"
-                  name="address.postalCode"
-                  value={profile.address.postalCode}
-                  onChange={(value) => setProfile(p => ({ 
-                    ...p, 
-                    address: { ...p.address, postalCode: value }
-                  }))}
-                  required
                 />
               </div>
             </div>
@@ -264,13 +227,13 @@ export default function RestaurantProfile() {
             />
 
             <FormField
-              label="Minimum Order ($)"
+              label="Minimum Order (₦)"
               name="minimumOrder"
               type="number"
               value={profile.minimumOrder.toString()}
               onChange={(value) => setProfile(p => ({ ...p, minimumOrder: Number(value) }))}
               min="0"
-              step="0.01"
+              step="100"
             />
 
             <ImageUploadField

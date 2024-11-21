@@ -1,11 +1,9 @@
 import { ReactNode } from "react";
+import { Timestamp, FieldValue } from 'firebase/firestore';
 
 export interface Address {
-  street: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  country: string;
+  id?: string;
+  address: string;
   additionalInstructions?: string;
 }
 
@@ -17,16 +15,10 @@ export interface OrderItem {
   specialInstructions?: string;
 }
 
-export type OrderStatus =
-  | "pending"
-  | "accepted"
-  | "preparing"
-  | "ready"
-  | "delivered"
-  | "cancelled";
+export type OrderStatus = 'cart' | 'pending' | 'accepted' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 
 export type PaymentMethod = 'card' | 'cash';
-export type PaymentStatus = 'pending' | 'completed' | 'failed';
+export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 export type NotificationStatus = "pending" | "cancelled" | "completed";
 
 export interface Order {
@@ -39,14 +31,20 @@ export interface Order {
   deliveryAddress: Address;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string | FieldValue;
+  updatedAt: string | FieldValue;
   acceptedAt?: string;
   preparedAt?: string;
   deliveredAt?: string;
   cancelledAt?: string;
   estimatedDeliveryTime?: string;
   customerName: string;
+  subtotal: number;
+  deliveryFee: number;
+  serviceFee: number;
+  readyAt?: string;
+  customerPhone: string;
+  specialInstructions?: string;
 }
 
 export interface OrderNotification {
@@ -58,4 +56,9 @@ export interface OrderNotification {
   status: NotificationStatus;
   amount: number;
   customerName: ReactNode;
+}
+
+export interface UserOrder extends Order {
+  status: OrderStatus;
+  lastUpdated: string;
 }

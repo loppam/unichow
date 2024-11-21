@@ -1,21 +1,23 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { MenuItem, MenuCategory } from '../types/menu';
-import { menuService } from '../services/menuService';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
-import MenuItemModal from '../components/menu/MenuItemModal';
-import CategoryModal from '../components/menu/CategoryModal';
-import RestaurantLayout from '../components/RestaurantLayout';
+import { useState, useEffect } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { MenuItem, MenuCategory } from "../types/menu";
+import { menuService } from "../services/menuService";
+import { Plus, Edit2, Trash2 } from "lucide-react";
+import MenuItemModal from "../components/menu/MenuItemModal";
+import CategoryModal from "../components/menu/CategoryModal";
+import RestaurantLayout from "../components/RestaurantLayout";
 export default function RestaurantMenu() {
   const { user } = useAuth();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<MenuCategory | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<MenuCategory | null>(
+    null
+  );
 
   useEffect(() => {
     loadMenuData();
@@ -26,12 +28,12 @@ export default function RestaurantMenu() {
     try {
       const [menuItems, menuCategories] = await Promise.all([
         menuService.getMenuItems(user.uid),
-        menuService.getCategories(user.uid)
+        menuService.getCategories(user.uid),
       ]);
       setItems(menuItems);
       setCategories(menuCategories);
     } catch (err) {
-      setError('Failed to load menu data');
+      setError("Failed to load menu data");
       console.error(err);
     } finally {
       setLoading(false);
@@ -44,30 +46,34 @@ export default function RestaurantMenu() {
       if (selectedItem) {
         await menuService.updateMenuItem(user.uid, selectedItem.id, item);
       } else {
-        await menuService.addMenuItem(user.uid, item as {
-          name: string;
-          description: string;
-          price: number;
-          category: string;
-          image?: File;
-        });
+        await menuService.addMenuItem(
+          user.uid,
+          item as {
+            name: string;
+            description: string;
+            price: number;
+            category: string;
+            image?: File;
+          }
+        );
       }
       await loadMenuData();
       setIsItemModalOpen(false);
       setSelectedItem(null);
     } catch (err) {
-      setError('Failed to save menu item');
+      setError("Failed to save menu item");
       console.error(err);
     }
   };
 
   const handleDeleteItem = async (item: MenuItem) => {
-    if (!user || !window.confirm('Are you sure you want to delete this item?')) return;
+    if (!user || !window.confirm("Are you sure you want to delete this item?"))
+      return;
     try {
       await menuService.deleteMenuItem(user.uid, item.id);
       await loadMenuData();
     } catch (err) {
-      setError('Failed to delete menu item');
+      setError("Failed to delete menu item");
       console.error(err);
     }
   };
@@ -80,7 +86,7 @@ export default function RestaurantMenu() {
       setIsCategoryModalOpen(false);
       setSelectedCategory(null);
     } catch (err) {
-      setError('Failed to save category');
+      setError("Failed to save category");
       console.error(err);
     }
   };
@@ -89,11 +95,11 @@ export default function RestaurantMenu() {
     if (!user) return;
     try {
       await menuService.updateMenuItem(user.uid, item.id, {
-        isAvailable: !item.isAvailable
+        isAvailable: !item.isAvailable,
       });
       await loadMenuData();
     } catch (err) {
-      setError('Failed to update item availability');
+      setError("Failed to update item availability");
       console.error(err);
     }
   };
@@ -112,9 +118,7 @@ export default function RestaurantMenu() {
     <RestaurantLayout>
       <div className="space-y-6">
         {error && (
-          <div className="bg-red-50 text-red-500 p-4 rounded-lg">
-            {error}
-          </div>
+          <div className="bg-red-50 text-red-500 p-4 rounded-lg">{error}</div>
         )}
 
         {/* Categories Section */}
@@ -134,7 +138,7 @@ export default function RestaurantMenu() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {categories.map(category => (
+            {categories.map((category) => (
               <div
                 key={category.id}
                 className="border p-4 rounded-lg flex justify-between items-center"
@@ -171,7 +175,7 @@ export default function RestaurantMenu() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {items.map(item => (
+            {items.map((item) => (
               <div key={item.id} className="border rounded-lg overflow-hidden">
                 <div className="p-4">
                   <div className="flex justify-between items-start">
@@ -181,16 +185,20 @@ export default function RestaurantMenu() {
                         <button
                           onClick={() => handleToggleAvailability(item)}
                           className={`px-2 py-1 text-xs rounded ${
-                            item.isAvailable 
-                              ? 'bg-green-100 text-green-700' 
-                              : 'bg-red-100 text-red-700'
+                            item.isAvailable
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
                           }`}
                         >
-                          {item.isAvailable ? 'Available' : 'Unavailable'}
+                          {item.isAvailable ? "Available" : "Unavailable"}
                         </button>
                       </div>
-                      <p className="text-sm text-gray-500">{item.description}</p>
-                      <p className="text-lg font-medium mt-2">${item.price.toFixed(2)}</p>
+                      <p className="text-sm text-gray-500">
+                        {item.description}
+                      </p>
+                      <p className="text-lg font-medium mt-2">
+                        ₦{item.price.toFixed(2)}
+                      </p>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -240,4 +248,4 @@ export default function RestaurantMenu() {
       />
     </RestaurantLayout>
   );
-} 
+}

@@ -96,7 +96,7 @@ export default function OrderDetails({ order, onStatusUpdate }: OrderDetailsProp
         </div>
         <div className="text-right">
           <div className="text-2xl font-semibold">
-            ${order.total.toFixed(2)}
+          ₦{order.total.toFixed(2)}
           </div>
           <span className="text-gray-500">
             {order.paymentMethod} · {order.paymentStatus}
@@ -118,14 +118,8 @@ export default function OrderDetails({ order, onStatusUpdate }: OrderDetailsProp
             </a>
           </div>
           <div className="flex items-center gap-2">
-            <Mail className="h-4 w-4 text-gray-400" />
-            <a href={`mailto:${order.customerEmail}`} className="text-blue-500 hover:underline">
-              {order.customerEmail}
-            </a>
-          </div>
-          <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 text-gray-400" />
-            <span className="text-gray-500">{order.deliveryAddress}</span>
+            <span className="text-gray-500">{order.deliveryAddress.address}</span>
           </div>
         </div>
       </div>
@@ -146,9 +140,9 @@ export default function OrderDetails({ order, onStatusUpdate }: OrderDetailsProp
                 )}
               </div>
               <div className="text-right">
-                <div>${(item.price * item.quantity).toFixed(2)}</div>
+                <div>₦{(item.price * item.quantity).toFixed(2)}</div>
                 <div className="text-sm text-gray-500">
-                  {item.quantity} × ${item.price.toFixed(2)}
+                  {item.quantity} × ₦{item.price.toFixed(2)}
                 </div>
               </div>
             </div>
@@ -159,15 +153,15 @@ export default function OrderDetails({ order, onStatusUpdate }: OrderDetailsProp
         <div className="mt-6 pt-6 border-t space-y-2">
           <div className="flex justify-between text-gray-500">
             <span>Subtotal</span>
-            <span>${order.subtotal.toFixed(2)}</span>
+            <span>₦{order.subtotal.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-gray-500">
             <span>Delivery Fee</span>
-            <span>${order.deliveryFee.toFixed(2)}</span>
+            <span>₦{order.deliveryFee.toFixed(2)}</span>
           </div>
           <div className="flex justify-between font-semibold text-lg">
             <span>Total</span>
-            <span>${order.total.toFixed(2)}</span>
+            <span>₦{order.total.toFixed(2)}</span>
           </div>
         </div>
       </div>

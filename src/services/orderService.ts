@@ -1,6 +1,6 @@
 import { db } from '../firebase/config';
 import { collection, doc, query, where, orderBy, limit, updateDoc, getDoc, getDocs, onSnapshot, increment, setDoc } from 'firebase/firestore';
-import { Order, OrderStatus, OrderItem, Address, PaymentMethod } from '../types/order';
+import { Order, OrderStatus, OrderItem, Address, PaymentMethod, PaymentStatus, UserOrder } from '../types/order';
 import { notificationService } from './notificationService';
 
 export const orderService = {
@@ -73,6 +73,9 @@ export const orderService = {
         case 'preparing':
           updates.preparedAt = timestamp;
           break;
+        case 'ready':
+          updates.readyAt = timestamp;
+          break;
         case 'delivered':
           updates.deliveredAt = timestamp;
           break;
@@ -129,6 +132,14 @@ export const orderService = {
     deliveryAddress: Address;
     paymentMethod: PaymentMethod;
     customerName: string;
+    total: number;
+    subtotal: number;
+    deliveryFee: number;
+    serviceFee: number;
+    status: OrderStatus;
+    paymentStatus: PaymentStatus;
+    createdAt: string;
+    updatedAt: string;
   }): Promise<string> {
     const orderRef = doc(collection(db, 'orders'));
     const timestamp = new Date().toISOString();
@@ -164,5 +175,44 @@ export const orderService = {
     ]);
 
     return orderRef.id;
+  },
+
+  async updatePaymentStatus(
+    orderId: string,
+    paymentStatus: PaymentStatus,
+    paymentReference?: string
+  ): Promise<void> {
+    try {
+      const orderRef = doc(db, 'orders', orderId);
+      const updates = {
+        paymentStatus,
+        ...(paymentReference && { paymentReference }),
+        updatedAt: new Date().toISOString()
+      };
+      await updateDoc(orderRef, updates);
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      throw error;
+    }
+  },
+
+  async getUserOrders(userId: string): Promise<UserOrder[]> {
+    try {
+      const ordersRef = collection(db, 'orders');
+      const q = query(
+        ordersRef,
+        where('customerId', '==', userId),
+        orderBy('createdAt', 'desc')
+      );
+      
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as UserOrder[];
+    } catch (error) {
+      console.error('Error fetching user orders:', error);
+      throw error;
+    }
   }
 };

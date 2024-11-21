@@ -31,6 +31,7 @@ import UserManagement from './pages/admin/UserManagement';
 import VerificationReview from './pages/admin/VerificationReview';
 import PublicRestaurantMenu from './pages/PublicRestaurantMenu';
 import { CartProvider } from './contexts/CartContext';
+import UserOrders from './pages/UserOrders';
 
 function App() {
   return (
@@ -182,6 +183,9 @@ function App() {
 
                   {/* Public restaurant menu route */}
                   <Route path="/restaurant/:id" element={<PublicRestaurantMenu />} />
+
+                  {/* User orders route */}
+                  <Route path="/orders" element={<UserOrders />} />
                 </Routes>
               </CartProvider>
             </NotificationProvider>

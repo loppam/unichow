@@ -8,7 +8,7 @@ interface RestaurantCardProps {
   image: string;
   rating: number;
   deliveryTime: string;
-  minOrder: string;
+  minimumOrder: number;
 }
 
 export default function RestaurantCard({
@@ -17,7 +17,7 @@ export default function RestaurantCard({
   image,
   rating,
   deliveryTime,
-  minOrder,
+  minimumOrder,
 }: RestaurantCardProps) {
   return (
     <Link to={`/restaurant/${id}`} className="block">
@@ -38,7 +38,7 @@ export default function RestaurantCard({
             <span className="mx-2">•</span>
             <span>{deliveryTime}</span>
             <span className="mx-2">•</span>
-            <span>Min. {minOrder}</span>
+            <span>Min. {minimumOrder}</span>
           </div>
         </div>
       </div>

@@ -5,7 +5,9 @@ import {
   setDoc, 
   updateDoc, 
   getDoc,
-  writeBatch 
+  writeBatch,
+  addDoc,
+  collection
 } from 'firebase/firestore';
 import { 
   ref, 
@@ -17,6 +19,7 @@ import {
   RestaurantRegistrationData, 
   RestaurantStats 
 } from '../types/restaurant';
+import { paystackService } from './paystackService';
 
 // Helper functions for file uploads
 const uploadFile = async (path: string, file: File): Promise<string> => {
@@ -28,58 +31,20 @@ const uploadFile = async (path: string, file: File): Promise<string> => {
 export const restaurantService = {
   async registerRestaurant(data: RestaurantRegistrationData): Promise<string> {
     try {
-      // 1. Create Firebase Auth account
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        data.email,
-        data.password
-      );
-      const { uid } = userCredential.user;
+      // Create Paystack subaccount
+      const paystackSubaccountCode = await paystackService.createSubaccount(data.bankDetails);
 
-      // 2. Create initial documents (parallel operations)
-      const timestamp = new Date().toISOString();
-      
-      await Promise.all([
-        // Create user document
-        setDoc(doc(db, 'users', uid), {
-          email: data.email,
-          userType: 'restaurant',
-          restaurantName: data.restaurantName,
-          createdAt: timestamp,
-          updatedAt: timestamp
-        }),
+      // Add the subaccount code to the restaurant data
+      const restaurantData = {
+        ...data,
+        paystackSubaccountCode,
+        createdAt: new Date().toISOString(),
+        status: 'pending'
+      };
 
-        // Create restaurant document
-        setDoc(doc(db, 'restaurants', uid), {
-          restaurantName: data.restaurantName,
-          email: data.email,
-          phone: data.phone,
-          address: data.address,
-          description: data.description || '',
-          cuisine: data.cuisine || [],
-          openingHours: data.openingHours || '',
-          closingHours: data.closingHours || '',
-          status: 'pending',
-          isApproved: false,
-          rating: 0,
-          totalOrders: 0,
-          minimumOrder: 0,
-          profileComplete: false,
-          createdAt: timestamp,
-          updatedAt: timestamp
-        } as RestaurantProfile)
-      ]);
-
-      // 3. Handle logo upload separately (non-blocking)
-      if (data.logo) {
-        const logoUrl = await uploadFile(
-          `restaurants/${uid}/logo`,
-          data.logo
-        );
-        await updateDoc(doc(db, 'restaurants', uid), { logo: logoUrl });
-      }
-
-      return uid;
+      // Save to Firebase
+      const docRef = await addDoc(collection(db, 'restaurants'), restaurantData);
+      return docRef.id;
     } catch (error) {
       console.error('Error registering restaurant:', error);
       throw error;
@@ -139,10 +104,10 @@ export const restaurantService = {
     }
   },
 
-  uploadFile(restaurantId: string, file: File, type: 'logo' | 'banner'): Promise<string> {
+  async uploadFile(restaurantId: string, file: File, type: 'logo' | 'banner'): Promise<string> {
     const storageRef = ref(storage, `restaurants/${restaurantId}/${type}/${file.name}`);
-    return uploadBytes(storageRef, file)
-      .then(() => getDownloadURL(storageRef));
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
   },
 
   async getRestaurantStats(restaurantId: string): Promise<RestaurantStats> {

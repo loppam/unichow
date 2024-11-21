@@ -5,6 +5,10 @@
     { "path": "./tsconfig.node.json" }
   ],
   "compilerOptions": {
-    "types": ["vite/client", "vite-plugin-pwa/client", "vite-plugin-pwa/info"]
+    "types": ["vite/client", "vite-plugin-pwa/client", "vite-plugin-pwa/info"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
   }
 }

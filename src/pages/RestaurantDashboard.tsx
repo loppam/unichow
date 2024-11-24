@@ -40,7 +40,7 @@ export default function RestaurantDashboard() {
 
         const [restaurantProfile, completedOrders, pendingOrders] = await Promise.all([
           restaurantService.getRestaurantProfile(user.uid),
-          orderService.getOrders(user.uid, ["ready"] as OrderStatus[], todayStart),
+          orderService.getOrders(user.uid, ["ready", "delivered"] as OrderStatus[], todayStart),
           orderService.getOrders(user.uid, ["pending"] as OrderStatus[])
         ]);
 

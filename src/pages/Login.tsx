@@ -81,11 +81,6 @@ export default function Login() {
           throw new Error("Your restaurant account is pending approval. We'll notify you via email once approved.");
         }
         navigate("/restaurant-dashboard");
-
-        const token = await notificationService.requestPermission(userCredential.user.uid);
-        if (token) {
-          await notificationService.saveToken(userCredential.user.uid, token);
-        }
       } else {
         navigate("/home");
       }

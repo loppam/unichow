@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { ShoppingCart, Clock, CheckCircle, ArrowRight, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
+import { realtimeService } from '../services/realtimeService';
 
 export default function UserOrders() {
   const { user } = useAuth();
@@ -19,18 +20,15 @@ export default function UserOrders() {
   useEffect(() => {
     if (!user) return;
     
-    const loadOrders = async () => {
-      try {
-        const userOrders = await orderService.getUserOrders(user.uid);
-        setOrders(userOrders);
-      } catch (error) {
-        console.error('Error loading orders:', error);
-      } finally {
+    const unsubscribe = realtimeService.subscribeToUserOrders(
+      user.uid,
+      (updatedOrders) => {
+        setOrders(updatedOrders as UserOrder[]);
         setLoading(false);
       }
-    };
+    );
 
-    loadOrders();
+    return () => unsubscribe();
   }, [user]);
 
   const getStatusColor = (status: OrderStatus) => {
@@ -46,6 +44,7 @@ export default function UserOrders() {
   };
 
   const filteredOrders = orders.filter(order => {
+    console.log('Filtering order:', order);
     if (activeTab === 'ongoing') {
       return ['pending', 'accepted', 'preparing', 'ready'].includes(order.status);
     } else if (activeTab === 'completed') {
@@ -195,27 +194,34 @@ export default function UserOrders() {
               <div key={order.id} className="bg-white rounded-lg shadow-sm p-4">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="font-medium">Order #{order.id.slice(-6)}</h3>
+                    <h3 className="font-semibold">Order #{order.id.slice(-6)}</h3>
                     <p className="text-sm text-gray-500">
-                      {format(new Date(order.createdAt as string), 'PPp')}
+                      {new Date(order.createdAt).toLocaleString()}
                     </p>
                   </div>
-                  <span className={`px-2 py-1 rounded-full text-sm ${getStatusColor(order.status)}`}>
-                    {order.status}
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                   </span>
                 </div>
 
-                <div className="border-t pt-4">
-                  <div className="font-medium mb-2">{order.items.length} items</div>
-                  {order.items.map((item, index) => (
-                    <div key={index} className="flex justify-between text-sm py-1">
-                      <span>{item.quantity}x {item.name}</span>
-                      <span>{formatCurrency(item.price * item.quantity)}</span>
+                <div className="space-y-4">
+                  {order.packs?.map((pack) => (
+                    <div key={pack.id} className="border-t pt-4">
+                      <div className="text-sm font-medium mb-2">{pack.restaurantName}</div>
+                      {pack.items.map((item, index) => (
+                        <div key={index} className="flex justify-between text-sm">
+                          <span>{item.quantity}x {item.name}</span>
+                          <span>₦{item.price.toFixed(2)}</span>
+                        </div>
+                      ))}
                     </div>
                   ))}
-                  <div className="border-t mt-2 pt-2 flex justify-between font-medium">
+                </div>
+
+                <div className="mt-4 pt-4 border-t">
+                  <div className="flex justify-between text-sm font-medium">
                     <span>Total</span>
-                    <span>{formatCurrency(order.total)}</span>
+                    <span>₦{order.total.toFixed(2)}</span>
                   </div>
                 </div>
               </div>

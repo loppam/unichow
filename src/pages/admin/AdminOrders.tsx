@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, Timestamp, getDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { format } from 'date-fns';
 
 interface Order {
   id: string;
+  restaurantId: string;
   restaurantName: string;
   customerName: string;
   total: number;
   status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
-  createdAt: Date;
+  createdAt: Timestamp | string;
 }
 
 export default function AdminOrders() {
@@ -24,11 +25,32 @@ export default function AdminOrders() {
         const q = query(ordersRef, orderBy('createdAt', 'desc'), limit(50));
         const snapshot = await getDocs(q);
         
-        const ordersData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate()
-        })) as Order[];
+        // Fetch all unique restaurant documents in parallel
+        const restaurantPromises = new Map();
+        snapshot.docs.forEach(docSnapshot => {
+          const data = docSnapshot.data();
+          if (data.restaurantId && !restaurantPromises.has(data.restaurantId)) {
+            restaurantPromises.set(
+              data.restaurantId,
+              getDoc(doc(db, 'restaurants', data.restaurantId))
+            );
+          }
+        });
+
+        const restaurants = await Promise.all(restaurantPromises.values());
+        const restaurantData = new Map(
+          restaurants.map(doc => [doc.id, doc.data()?.restaurantName])
+        );
+
+        const ordersData = snapshot.docs.map(docSnapshot => {
+          const data = docSnapshot.data();
+          return {
+            id: docSnapshot.id,
+            ...data,
+            restaurantName: restaurantData.get(data.restaurantId) || 'Unknown Restaurant',
+            createdAt: data.createdAt
+          };
+        }) as Order[];
         
         setOrders(ordersData);
       } catch (err) {
@@ -41,6 +63,15 @@ export default function AdminOrders() {
 
     fetchOrders();
   }, []);
+
+  const formatDate = (date: Timestamp | string | Date) => {
+    if (date instanceof Timestamp) {
+      return format(date.toDate(), 'PPp');
+    } else if (typeof date === 'string') {
+      return format(new Date(date), 'PPp');
+    }
+    return format(date, 'PPp');
+  };
 
   return (
     <div className="space-y-6">
@@ -105,7 +136,7 @@ export default function AdminOrders() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {format(order.createdAt, 'MMM d, yyyy HH:mm')}
+                    {formatDate(order.createdAt)}
                   </td>
                 </tr>
               ))}

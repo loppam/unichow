@@ -27,6 +27,9 @@ export default function ProtectedRoute({
         return;
       }
 
+      // Add a small delay to ensure auth state is ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       try {
         const userDoc = await getDoc(doc(db, "users", user.uid));
         const userData = userDoc.data();

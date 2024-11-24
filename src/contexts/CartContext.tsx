@@ -8,6 +8,7 @@ export interface CartItem {
   packId: string;
   restaurantId: string;
   restaurantName: string;
+  specialInstructions?: string;
 }
 
 interface Pack {

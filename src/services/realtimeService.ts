@@ -1,6 +1,8 @@
 import { collection, doc, query, limit, onSnapshot, orderBy, where, DocumentSnapshot, QuerySnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { Order, OrderStatus } from '../types/order';
+import { Order, OrderStatus, UserOrder } from '../types/order';
+import { MenuItem } from '../types/menu';
+import { Restaurant } from '../types/restaurant';
 
 type OrderCallback = (order: Order) => void;
 type OrdersCallback = (orders: Order[]) => void;
@@ -24,6 +26,10 @@ const mapOrderData = (id: string, data: any): Order => ({
   deliveredAt: data.deliveredAt,
   cancelledAt: data.cancelledAt,
   estimatedDeliveryTime: data.estimatedDeliveryTime,
+  customerAddress: data.customerAddress,
+  subtotal: data.subtotal,
+  deliveryFee: data.deliveryFee,
+  serviceFee: data.serviceFee
 });
 
 export const realtimeService = {
@@ -84,6 +90,65 @@ export const realtimeService = {
         mapOrderData(doc.id, doc.data())
       );
       callback(orders);
+    });
+  },
+
+  subscribeToOrders(restaurantId: string, callback: (orders: Order[]) => void) {
+    const q = query(
+      collection(db, "orders"),
+      where("restaurantId", "==", restaurantId),
+      orderBy("createdAt", "desc")
+    );
+    return onSnapshot(q, (snapshot) => {
+      const orders = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Order[];
+      callback(orders);
+    });
+  },
+
+  subscribeToUserOrders(userId: string, callback: (orders: Order[]) => void) {
+    const q = query(
+      collection(db, "orders"),
+      where("customerId", "==", userId),
+      orderBy("createdAt", "desc")
+    );
+    return onSnapshot(q, (snapshot) => {
+      const orders = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        lastUpdated: doc.data().updatedAt || doc.data().createdAt
+      })) as UserOrder[];
+      callback(orders);
+    });
+  },
+
+  subscribeToMenu(restaurantId: string, callback: (items: MenuItem[]) => void) {
+    const q = query(
+      collection(db, "restaurants", restaurantId, "menu"),
+      orderBy("updatedAt", "desc")
+    );
+    return onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as MenuItem[];
+      callback(items);
+    });
+  },
+
+  subscribeToRestaurants(callback: (restaurants: Restaurant[]) => void) {
+    const q = query(
+      collection(db, "restaurants"),
+      where("status", "!=", "deleted")
+    );
+    return onSnapshot(q, (snapshot) => {
+      const restaurants = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Restaurant[];
+      callback(restaurants);
     });
   }
 };  

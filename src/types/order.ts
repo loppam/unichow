@@ -21,6 +21,14 @@ export type PaymentMethod = 'card' | 'cash';
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 export type NotificationStatus = "pending" | "cancelled" | "completed";
 
+export interface OrderPack {
+  id: string;
+  restaurantId: string;
+  restaurantName: string;
+  restaurantAddress?: string;
+  items: OrderItem[];
+}
+
 export interface Order {
   id: string;
   customerId: string;
@@ -47,6 +55,7 @@ export interface Order {
     address: string;
     additionalInstructions?: string;
   };
+  packs?: OrderPack[];
 }
 
 export interface OrderNotification {

@@ -6,6 +6,8 @@ import { Plus, Edit2, Trash2 } from "lucide-react";
 import MenuItemModal from "../components/menu/MenuItemModal";
 import CategoryModal from "../components/menu/CategoryModal";
 import RestaurantLayout from "../components/RestaurantLayout";
+import { realtimeService } from "../services/realtimeService";
+
 export default function RestaurantMenu() {
   const { user } = useAuth();
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -21,6 +23,20 @@ export default function RestaurantMenu() {
 
   useEffect(() => {
     loadMenuData();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    
+    const unsubscribe = realtimeService.subscribeToMenu(
+      user.uid,
+      (updatedItems) => {
+        setItems(updatedItems);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [user]);
 
   const loadMenuData = async () => {

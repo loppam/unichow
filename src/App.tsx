@@ -32,6 +32,7 @@ import VerificationReview from './pages/admin/VerificationReview';
 import PublicRestaurantMenu from './pages/PublicRestaurantMenu';
 import { CartProvider } from './contexts/CartContext';
 import UserOrders from './pages/UserOrders';
+import RestaurantOrderView from './pages/RestaurantOrderView';
 
 function App() {
   return (
@@ -140,6 +141,10 @@ function App() {
                         <RestaurantPending />
                       </ProtectedRoute>
                     }
+                  />
+                  <Route 
+                    path="/restaurant/orders/:orderId" 
+                    element={<ProtectedRoute userType="restaurant"><RestaurantOrderView /></ProtectedRoute>} 
                   />
 
                   {/* Admin routes */}

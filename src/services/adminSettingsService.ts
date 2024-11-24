@@ -37,6 +37,8 @@ async function checkAdminStatus() {
   return true;
 }
 
+const SETTINGS_DOC_ID = 'delivery'; // Fixed document ID for delivery settings
+
 export const adminSettingsService = {
   async getSettings(): Promise<AdminSettings> {
     const docRef = doc(db, 'admin/settings');
@@ -68,40 +70,49 @@ export const adminSettingsService = {
     });
   },
 
-  async getDeliverySettings() {
-    const isAdmin = await checkAdminStatus();
-    if (!isAdmin) return null;
-    
-    const docRef = doc(db, 'admin/delivery');
-    const docSnap = await getDoc(docRef);
-    return docSnap.data() as DeliverySettings;
+  async getDeliverySettings(): Promise<DeliverySettings> {
+    try {
+      const settingsRef = doc(db, 'admin/settings');
+      const settingsDoc = await getDoc(settingsRef);
+      
+      if (!settingsDoc.exists() || !settingsDoc.data().delivery) {
+        // Create default settings if they don't exist
+        const defaultSettings: DeliverySettings = {
+          freeDeliveryThreshold: 5000,
+          baseDeliveryFee: 500
+        };
+        await updateDoc(settingsRef, {
+          delivery: {
+            ...defaultSettings,
+            lastUpdated: new Date().toISOString()
+          }
+        });
+        return defaultSettings;
+      }
+
+      const { delivery } = settingsDoc.data();
+      return {
+        freeDeliveryThreshold: delivery.freeDeliveryThreshold,
+        baseDeliveryFee: delivery.baseDeliveryFee
+      };
+    } catch (error) {
+      console.error('Error fetching delivery settings:', error);
+      throw error;
+    }
   },
 
-  async updateDeliverySettings(settings: DeliverySettings) {
-    const isAdmin = await checkAdminStatus();
-    if (!isAdmin) throw new Error('Unauthorized access: Admin privileges required');
-    
-    const docRef = doc(db, 'admin/settings');
-    const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists()) {
-      // Create the document if it doesn't exist
-      await setDoc(docRef, {
-        delivery: {
-          freeDeliveryThreshold: settings.freeDeliveryThreshold,
-          baseDeliveryFee: settings.baseDeliveryFee,
-        },
-        lastUpdated: new Date().toISOString()
-      });
-    } else {
-      // Update existing document
-      await updateDoc(docRef, {
-        delivery: {
-          freeDeliveryThreshold: settings.freeDeliveryThreshold,
-          baseDeliveryFee: settings.baseDeliveryFee,
-        },
-        lastUpdated: new Date().toISOString()
-      });
+  async updateDeliverySettings(settings: DeliverySettings): Promise<void> {
+    try {
+      const settingsRef = doc(db, 'admin/settings');
+      const updates = {
+        'delivery.baseDeliveryFee': settings.baseDeliveryFee,
+        'delivery.freeDeliveryThreshold': settings.freeDeliveryThreshold,
+        'delivery.lastUpdated': new Date().toISOString()
+      };
+      await updateDoc(settingsRef, updates);
+    } catch (error) {
+      console.error('Error updating delivery settings:', error);
+      throw error;
     }
   }
 }; 

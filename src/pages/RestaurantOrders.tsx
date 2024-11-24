@@ -1,23 +1,12 @@
 import { useState, useEffect } from "react";
-import { collection, query, where, orderBy, getDocs, updateDoc, doc } from "firebase/firestore";
-import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
 import { ClipboardList, Clock, CheckCircle, ShoppingBag } from "lucide-react";
 import RestaurantNavigation from "../components/RestaurantNavigation";
-
-interface Order {
-  id: string;
-  status: 'pending' | 'accepted' | 'ready' | 'cancelled';
-  items: Array<{
-    name: string;
-    quantity: number;
-    price: number;
-  }>;
-  total: number;
-  customerName: string;
-  customerAddress: string;
-  createdAt: string;
-}
+import { orderService } from "../services/orderService";
+import { Order } from "../types/order";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../firebase/config";
+import { useNavigate } from "react-router-dom";
 
 export default function RestaurantOrders() {
   const { user } = useAuth();
@@ -25,41 +14,33 @@ export default function RestaurantOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<'pending' | 'accepted' | 'ready'>('pending');
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      if (!user) return;
+    if (!user?.uid) return;
 
-      try {
-        const ordersRef = collection(db, "orders");
-        const q = query(
-          ordersRef,
-          where("restaurantId", "==", user.uid),
-          orderBy("createdAt", "desc")
+    // Subscribe to real-time order updates
+    const unsubscribe = orderService.subscribeToNewOrders(
+      user.uid,
+      (updatedOrders) => {
+        // Filter orders by restaurant ID and relevant statuses
+        const filteredOrders = updatedOrders.filter(order => 
+          order.restaurantId === user.uid && 
+          ['pending', 'accepted', 'ready', 'delivered'].includes(order.status)
         );
-
-        const querySnapshot = await getDocs(q);
-        const ordersData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Order[];
-
-        setOrders(ordersData);
-      } catch (err) {
-        console.error("Error fetching orders:", err);
-        setError("Failed to load orders");
-      } finally {
+        setOrders(filteredOrders);
         setLoading(false);
       }
-    };
+    );
 
-    fetchOrders();
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, [user]);
 
   const groupedOrders = {
     pending: orders.filter(order => order.status === 'pending'),
     accepted: orders.filter(order => order.status === 'accepted'),
-    ready: orders.filter(order => order.status === 'ready')
+    ready: orders.filter(order => order.status === 'ready' || order.status === 'delivered')
   };
 
   const getStatusColor = (status: Order['status']) => {
@@ -67,6 +48,7 @@ export default function RestaurantOrders() {
       case 'pending': return 'bg-yellow-100 text-yellow-800';
       case 'accepted': return 'bg-blue-100 text-blue-800';
       case 'ready': return 'bg-green-100 text-green-800';
+      case 'delivered': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -74,12 +56,12 @@ export default function RestaurantOrders() {
   const handleStatusUpdate = async (orderId: string, newStatus: Order['status']) => {
     try {
       const orderRef = doc(db, "orders", orderId);
-      await updateDoc(orderRef, { status: newStatus });
+      await updateDoc(orderRef, { 
+        status: newStatus,
+        updatedAt: new Date().toISOString()
+      });
       
-      // Update local state
-      setOrders(orders.map(order => 
-        order.id === orderId ? { ...order, status: newStatus } : order
-      ));
+      // Local state will be updated automatically by the subscription
     } catch (err) {
       console.error("Error updating order status:", err);
       // Optionally add error handling UI
@@ -157,7 +139,11 @@ export default function RestaurantOrders() {
         ) : (
           <div className="space-y-4">
             {groupedOrders[activeTab].map((order) => (
-              <div key={order.id} className="bg-white rounded-lg shadow-sm p-4">
+              <div 
+                key={order.id} 
+                className="bg-white rounded-lg shadow-sm p-4 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => navigate(`/restaurant/orders/${order.id}`)}
+              >
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="font-semibold">Order #{order.id.slice(-6)}</h3>
@@ -190,10 +176,15 @@ export default function RestaurantOrders() {
 
                 <div className="border-t pt-4">
                   <h4 className="font-medium mb-2">Order Items</h4>
-                  {order.items.map((item, index) => (
-                    <div key={index} className="flex justify-between text-sm mb-1">
-                      <span>{item.quantity}x {item.name}</span>
-                      <span>${item.price.toFixed(2)}</span>
+                  {order.packs?.map((pack) => (
+                    <div key={pack.id}>
+                      <div className="text-sm text-gray-600 mb-2">{pack.restaurantName}</div>
+                      {pack.items.map((item, index) => (
+                        <div key={index} className="flex justify-between text-sm mb-1">
+                          <span>{item.quantity}x {item.name}</span>
+                          <span>₦{item.price.toFixed(2)}</span>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>

@@ -1,6 +1,6 @@
 import { db } from '../firebase/config';
-import { collection, doc, query, where, orderBy, limit, updateDoc, getDoc, getDocs, onSnapshot, increment, setDoc, QueryConstraint, deleteDoc, writeBatch } from 'firebase/firestore';
-import { Order, OrderStatus, OrderItem, Address, PaymentMethod, PaymentStatus, UserOrder } from '../types/order';
+import { collection, doc, query, where, orderBy, limit, updateDoc, getDoc, getDocs, onSnapshot, setDoc, QueryConstraint, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { Order, OrderStatus, Address, PaymentStatus, UserOrder } from '../types/order';
 import { notificationService } from './notificationService';
 
 export const orderService = {
@@ -113,15 +113,13 @@ export const orderService = {
     }
   },
 
-  subscribeToNewOrders(
-    restaurantId: string, 
-    callback: (orders: Order[]) => void
-  ): () => void {
+  subscribeToNewOrders(restaurantId: string, callback: (orders: Order[]) => void) {
+    const ordersRef = collection(db, "orders");
     const q = query(
-      collection(db, 'orders'),
-      where('restaurantId', '==', restaurantId),
-      where('status', '==', 'pending'),
-      orderBy('createdAt', 'desc')
+      ordersRef,
+      where("restaurantId", "==", restaurantId),
+      where("status", "in", ["pending", "accepted", "ready", "delivered"]),
+      orderBy("createdAt", "desc")
     );
 
     return onSnapshot(q, (snapshot) => {
@@ -133,33 +131,6 @@ export const orderService = {
     });
   },
 
-  async createOrder(orderData: Omit<Order, 'id'>): Promise<Order> {
-    try {
-      const orderRef = doc(collection(db, 'orders'));
-      const order: Order = {
-        id: orderRef.id,
-        ...orderData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        status: 'pending'
-      };
-
-      // Create order first
-      await setDoc(orderRef, order);
-
-      try {
-        // Attempt to send notification, but don't fail if it errors
-        await notificationService.sendNewOrderNotification(order.restaurantId, order);
-      } catch (notificationError) {
-        console.warn('Failed to send notification, but order was created:', notificationError);
-      }
-
-      return order;
-    } catch (error) {
-      console.error('Error creating order:', error);
-      throw error;
-    }
-  },
 
   async updatePaymentStatus(
     orderId: string,
@@ -192,7 +163,8 @@ export const orderService = {
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        lastUpdated: doc.data().updatedAt || doc.data().createdAt
       })) as UserOrder[];
     } catch (error) {
       console.error('Error fetching user orders:', error);
@@ -274,5 +246,53 @@ export const orderService = {
 
   async deleteOrder(orderId: string): Promise<void> {
     await deleteDoc(doc(db, 'orders', orderId));
+  },
+
+  async createOrder(
+    userId: string,
+    orderData: {
+      packs: {
+        id: string;
+        restaurantName: string;
+        items: {
+          id: string;
+          name: string;
+          price: number;
+          quantity: number;
+          specialInstructions?: string;
+        }[];
+      }[];
+      restaurantId: string;
+      customerName: string;
+      customerPhone: string;
+      deliveryAddress: Address;
+      subtotal: number;
+      deliveryFee: number;
+      serviceFee: number;
+      total: number;
+    }
+  ): Promise<string> {
+    try {
+      const orderRef = await addDoc(collection(db, "orders"), {
+        userId,
+        restaurantId: orderData.restaurantId,
+        status: "pending",
+        packs: orderData.packs,
+        customerName: orderData.customerName,
+        customerPhone: orderData.customerPhone,
+        deliveryAddress: orderData.deliveryAddress,
+        subtotal: orderData.subtotal,
+        deliveryFee: orderData.deliveryFee,
+        serviceFee: orderData.serviceFee,
+        total: orderData.total,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      return orderRef.id;
+    } catch (error) {
+      console.error("Error creating order:", error);
+      throw error;
+    }
   },
 };

@@ -3,20 +3,8 @@ import { collection, query, where, getDocs, writeBatch, doc } from 'firebase/fir
 import { db } from '../firebase/config';
 import AdminLayout from '../components/AdminLayout';
 import { toast } from 'react-hot-toast';
-
-interface Restaurant {
-  id: string;
-  email: string;
-  restaurantName: string;
-  phone: string;
-  address: string;
-  isApproved: boolean;
-  status: string;
-  emailVerified: boolean;
-  createdAt: string;
-  cuisine?: string;
-  logo?: string;
-}
+import { realtimeService } from '../services/realtimeService';
+import { Restaurant, RestaurantStatus } from '../types/restaurant';
 
 export default function AdminRestaurants() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -24,31 +12,13 @@ export default function AdminRestaurants() {
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    fetchRestaurants();
-  }, []);
-
-  const fetchRestaurants = async () => {
-    try {
-      setLoading(true);
-      const q = query(
-        collection(db, "restaurants"),
-        where("status", "!=", "deleted")
-      );
-
-      const querySnapshot = await getDocs(q);
-      const restaurantList = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Restaurant[];
-
-      setRestaurants(restaurantList);
-    } catch (err) {
-      console.error("Error fetching restaurants:", err);
-      toast.error('Failed to load restaurants');
-    } finally {
+    const unsubscribe = realtimeService.subscribeToRestaurants((updatedRestaurants) => {
+      setRestaurants(updatedRestaurants as Restaurant[]);
       setLoading(false);
-    }
-  };
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleStatusChange = async (restaurantId: string, approve: boolean) => {
     try {
@@ -73,7 +43,7 @@ export default function AdminRestaurants() {
       setRestaurants(prev => 
         prev.map(restaurant => 
           restaurant.id === restaurantId 
-            ? { ...restaurant, isApproved: approve, status: newStatus }
+            ? { ...restaurant, isApproved: approve, status: newStatus as RestaurantStatus }
             : restaurant
         )
       );
@@ -149,7 +119,7 @@ export default function AdminRestaurants() {
           <span className="w-5">📱</span> {restaurant.phone}
         </p>
         <p className="flex items-center gap-2">
-          <span className="w-5">📍</span> {restaurant.address}
+          <span className="w-5">📍</span> {restaurant.address.address}
         </p>
         <p className="text-sm text-gray-500">
           Registered: {new Date(restaurant.createdAt).toLocaleDateString()}

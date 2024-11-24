@@ -11,6 +11,7 @@ interface AnalyticsData {
   totalOrders: number;
   recentOrders: number;
   totalRevenue: number;
+  totalServiceFee: number;
   adminType: string;
   dailyOrders: Array<{
     date: string;
@@ -27,6 +28,8 @@ interface Order {
   id: string;
   createdAt: Timestamp | string;
   total?: number;
+  deliveryFee?: number;
+  serviceFeePercentage?: number;
   status: string;
 }
 
@@ -49,7 +52,10 @@ async function fetchAnalytics(): Promise<AnalyticsData> {
     const restaurantsSnapshot = await getDocs(restaurantsQuery);
     
     // Get completed orders only
-    const ordersQuery = query(ordersRef, where("status", "==", "completed"));
+    const ordersQuery = query(
+      ordersRef, 
+      where("status", "==", "delivered")
+    );
     const ordersSnapshot = await getDocs(ordersQuery);
     const orders = ordersSnapshot.docs.map((doc) => ({
       id: doc.id,
@@ -98,6 +104,11 @@ async function fetchAnalytics(): Promise<AnalyticsData> {
       totalOrders: ordersSnapshot.size,
       recentOrders,
       totalRevenue: orders.reduce((sum, order) => sum + (order.total || 0), 0),
+      totalServiceFee: orders.reduce((sum, order) => {
+        const subtotal = (order.total || 0) - (order.deliveryFee || 0);
+        const feePercentage = order.serviceFeePercentage || 0.1;
+        return sum + (subtotal * feePercentage);
+      }, 0),
       adminType,
       dailyOrders,
       restaurantsByStatus,
@@ -112,10 +123,7 @@ export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>({
-    freeDeliveryThreshold: 5000,
-    baseDeliveryFee: 500
-  });
+  const [deliverySettings, setDeliverySettings] = useState<DeliverySettings | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -147,54 +155,40 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    const checkAdminAndFetchSettings = async () => {
+    const loadDeliverySettings = async () => {
       try {
-        const userDoc = await getDoc(doc(db, 'users', auth.currentUser?.uid || ''));
-        const userData = userDoc.data();
-        
-        if (!userData || (userData.role !== 'admin' && userData.role !== 'superadmin')) {
-          toast.error('Unauthorized: Admin access required');
-          return;
-        }
-
         const settings = await adminSettingsService.getDeliverySettings();
-        if (settings) {
-          setDeliverySettings(settings);
-        }
+        setDeliverySettings(settings);
       } catch (error) {
-        console.error('Error:', error);
+        console.error('Error loading delivery settings:', error);
         toast.error('Failed to load delivery settings');
       }
     };
 
-    if (auth.currentUser) {
-      checkAdminAndFetchSettings();
-    }
+    loadDeliverySettings();
   }, []);
 
   const handleDeliverySettingsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    if (!deliverySettings) return;
+    
     setDeliverySettings(prev => ({
-      ...prev,
+      ...prev!,
       [name]: Number(value)
     }));
   };
 
   const handleDeliverySettingsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!deliverySettings) return;
+
     try {
       setSaving(true);
       await adminSettingsService.updateDeliverySettings(deliverySettings);
       toast.success('Delivery settings updated successfully');
     } catch (error) {
       console.error('Error updating delivery settings:', error);
-      if (error instanceof Error) {
-        if (error.message.includes('Admin privileges')) {
-          toast.error('You need admin privileges to update these settings');
-        } else {
-          toast.error('Failed to update delivery settings');
-        }
-      }
+      toast.error('Failed to update delivery settings');
     } finally {
       setSaving(false);
     }
@@ -237,9 +231,15 @@ export default function AdminDashboard() {
     },
     {
       title: "Total Revenue",
-      value: `$${analytics.totalRevenue.toFixed(2)}`,
+      value: `₦${analytics.totalRevenue.toFixed(2)}`,
       icon: DollarSign,
       color: "bg-purple-500",
+    },
+    {
+      title: "Total Service Fee",
+      value: `₦${analytics.totalServiceFee.toFixed(2)}`,
+      icon: DollarSign,
+      color: "bg-indigo-500",
     },
   ];
 
@@ -301,51 +301,57 @@ export default function AdminDashboard() {
         <h2 className="text-lg font-semibold mb-4">
           Delivery Settings
         </h2>
-        <form onSubmit={handleDeliverySettingsSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Free Delivery Threshold (₦)
-              </label>
-              <input
-                type="number"
-                name="freeDeliveryThreshold"
-                value={deliverySettings.freeDeliveryThreshold}
-                onChange={handleDeliverySettingsChange}
-                min="0"
-                step="500"
-                className="w-full p-2 border rounded-lg"
-                required
-              />
+        {deliverySettings ? (
+          <form onSubmit={handleDeliverySettingsSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Free Delivery Threshold (₦)
+                </label>
+                <input
+                  type="number"
+                  name="freeDeliveryThreshold"
+                  value={deliverySettings.freeDeliveryThreshold}
+                  onChange={handleDeliverySettingsChange}
+                  min="0"
+                  step="500"
+                  className="w-full p-2 border rounded-lg"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Base Delivery Fee (₦)
+                </label>
+                <input
+                  type="number"
+                  name="baseDeliveryFee"
+                  value={deliverySettings.baseDeliveryFee}
+                  onChange={handleDeliverySettingsChange}
+                  min="0"
+                  step="100"
+                  className="w-full p-2 border rounded-lg"
+                  required
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Base Delivery Fee (₦)
-              </label>
-              <input
-                type="number"
-                name="baseDeliveryFee"
-                value={deliverySettings.baseDeliveryFee}
-                onChange={handleDeliverySettingsChange}
-                min="0"
-                step="100"
-                className="w-full p-2 border rounded-lg"
-                required
-              />
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-400"
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
             </div>
+          </form>
+        ) : (
+          <div className="text-center py-4">
+            Loading delivery settings...
           </div>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-400"
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </form>
+        )}
       </div>
     </div>
   );

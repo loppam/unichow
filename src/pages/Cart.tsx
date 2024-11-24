@@ -39,8 +39,13 @@ const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 const RIDER_ACCOUNT_CODE = import.meta.env.VITE_RIDER_ACCOUNT_CODE;
 
 export default function Cart() {
-  const { packs, increaseQuantity, decreaseQuantity, removeFromCart, clearCart } =
-    useCart();
+  const {
+    packs,
+    increaseQuantity,
+    decreaseQuantity,
+    removeFromCart,
+    clearCart,
+  } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -171,18 +176,29 @@ export default function Cart() {
 
   const handlePaystackSuccess = async (reference: PaystackResponse) => {
     try {
-      // Create order after successful payment
+      // Create order with pack structure
       const newOrder = {
         customerId: user!.uid,
         restaurantId: packs[0].restaurantId,
-        items: packs[0].items,
-        customerName: userData?.firstName || userData?.lastName
-          ? `${userData?.firstName || ''} ${userData?.lastName || ''}`
-          : "Anonymous",
-        customerAddress: deliveryAddress.address,
+        packs: packs.map((pack) => ({
+          id: pack.id,
+          restaurantName: pack.restaurantName,
+          items: pack.items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            specialInstructions: item.specialInstructions || "",
+          })),
+        })),
+        customerName:
+          userData?.firstName || userData?.lastName
+            ? `${userData?.firstName || ""} ${userData?.lastName || ""}`
+            : "Anonymous",
+        customerPhone: userData?.phone || "",
         deliveryAddress: {
           address: deliveryAddress.address,
-          additionalInstructions: deliveryAddress.additionalInstructions
+          additionalInstructions: deliveryAddress.additionalInstructions || "",
         },
         total: calculateTotal(),
         subtotal: calculateSubtotal(),
@@ -193,19 +209,18 @@ export default function Cart() {
         paymentStatus: "completed" as const,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        paymentReference: reference,
       };
 
-      // Create order (this will also send the notification)
-      await orderService.createOrder(newOrder);
+      // Create the order in the database
+      const orderId = await orderService.createOrder(user!.uid, newOrder);
 
       // Clear cart and redirect
       clearCart();
-      toast.success('Order placed successfully! Redirecting to orders...');
-      navigate('/orders');
+      navigate(`/orders`);
     } catch (error) {
       console.error("Error creating order:", error);
-      toast.error("Payment successful but order creation failed. Please contact support.");
-      navigate('/orders');
+      toast.error("Failed to create order");
     }
   };
 
@@ -224,42 +239,31 @@ export default function Cart() {
   };
 
   const handlePayment = async () => {
-    if (isInitializing || !user) {
-      toast.error("Please sign in to continue");
+    if (!user) {
+      toast.error("Please log in to continue");
+      return;
+    }
+
+    if (!deliveryAddress.address) {
+      toast.error("Please enter a delivery address");
       return;
     }
 
     try {
-      setIsInitializing(true);
-
-      if (!validateAddress()) {
-        setIsInitializing(false);
-        return;
+      // Fetch restaurant data if not already loaded
+      if (!restaurantData) {
+        const restaurantDoc = await getDoc(
+          doc(db, "restaurants", packs[0].restaurantId)
+        );
+        if (restaurantDoc.exists()) {
+          setRestaurantData(restaurantDoc.data());
+        }
       }
 
-      // Fetch and set restaurant data
-      const restaurantDoc = await getDoc(doc(db, "restaurants", packs[0].restaurantId));
-      const fetchedRestaurantData = restaurantDoc.data();
-      
-      if (!fetchedRestaurantData) {
-        throw new Error('Restaurant data not found');
-      }
-
-      setRestaurantData(fetchedRestaurantData);
-
-      if (!fetchedRestaurantData?.paymentInfo?.isVerified || !fetchedRestaurantData?.paymentInfo?.paystackSubaccountCode) {
-        throw new Error('Restaurant is not accepting orders at this time');
-      }
-
-      // Move to payment step
       setPaymentStep("payment");
-      setIsInitializing(false);
     } catch (error) {
-      console.error("Error processing payment:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Unable to process payment at this time. Please try again later."
-      );
-      setIsInitializing(false);
+      console.error("Error preparing payment:", error);
+      toast.error("Failed to initialize payment");
     }
   };
 
@@ -352,7 +356,7 @@ export default function Cart() {
 
   const getPaystackConfig = (restaurantData: any) => {
     if (!user || !restaurantData) {
-      throw new Error('Missing required payment information');
+      throw new Error("Missing required payment information");
     }
 
     const total = calculateTotal();
@@ -360,7 +364,7 @@ export default function Cart() {
 
     // Validate amount
     if (amount < 100) {
-      throw new Error('Order amount is too small');
+      throw new Error("Order amount is too small");
     }
 
     const baseConfig = {
@@ -373,9 +377,10 @@ export default function Cart() {
           {
             display_name: "Customer Name",
             variable_name: "customer_name",
-            value: userData?.firstName || userData?.lastName
-              ? `${userData?.firstName || ''} ${userData?.lastName || ''}`
-              : "Anonymous"
+            value:
+              userData?.firstName || userData?.lastName
+                ? `${userData?.firstName || ""} ${userData?.lastName || ""}`
+                : "Anonymous",
           },
         ],
       },
@@ -385,7 +390,10 @@ export default function Cart() {
 
     // Only add split if restaurant has valid payment info
     if (restaurantData?.paymentInfo?.paystackSubaccountCode) {
-      const deliveryFeePercentage = Math.max(1, Math.floor((calculateDeliveryFee() / total) * 100));
+      const deliveryFeePercentage = Math.max(
+        1,
+        Math.floor((calculateDeliveryFee() / total) * 100)
+      );
       const restaurantShare = 90 - deliveryFeePercentage;
 
       return {
@@ -396,18 +404,21 @@ export default function Cart() {
           subaccounts: [
             {
               subaccount: restaurantData.paymentInfo.paystackSubaccountCode,
-              share: restaurantShare
-            }
-          ]
-        }
+              share: restaurantShare,
+            },
+          ],
+        },
       };
     }
-    
+
     return baseConfig;
   };
 
   useEffect(() => {
-    if (restaurantData && !restaurantData?.paymentInfo?.paystackSubaccountCode) {
+    if (
+      restaurantData &&
+      !restaurantData?.paymentInfo?.paystackSubaccountCode
+    ) {
       toast.error("Restaurant payment information is missing");
     }
   }, [restaurantData]);
@@ -563,4 +574,3 @@ export default function Cart() {
     </div>
   );
 }
-

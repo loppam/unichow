@@ -197,7 +197,7 @@ export default function UserOrders() {
                   <div>
                     <h3 className="font-medium">Order #{order.id.slice(-6)}</h3>
                     <p className="text-sm text-gray-500">
-                      {format(new Date(order.createdAt), 'PPp')}
+                      {format(new Date(order.createdAt as string), 'PPp')}
                     </p>
                   </div>
                   <span className={`px-2 py-1 rounded-full text-sm ${getStatusColor(order.status)}`}>

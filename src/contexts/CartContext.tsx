@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 
 export interface CartItem {
   id: string;
@@ -29,10 +29,19 @@ interface CartContextType {
   clearCart: () => void;
 }
 
-const CartContext = createContext<CartContextType | undefined>(undefined);
+export const CartContext = createContext<CartContextType | undefined>(undefined);
 
-export function CartProvider({ children }: { children: ReactNode }) {
-  const [packs, setPacks] = useState<Pack[]>([]);
+export function CartProvider({ children }: { children: React.ReactNode }) {
+  const [packs, setPacks] = useState<Pack[]>(() => {
+    // Load initial state from localStorage
+    const savedPacks = localStorage.getItem('cartPacks');
+    return savedPacks ? JSON.parse(savedPacks) : [];
+  });
+
+  // Save to localStorage whenever packs change
+  useEffect(() => {
+    localStorage.setItem('cartPacks', JSON.stringify(packs));
+  }, [packs]);
 
   const createNewPack = (restaurantId: string, restaurantName: string) => {
     const newPackId = crypto.randomUUID();

@@ -24,6 +24,7 @@ export interface RestaurantProfile {
   updatedAt: string;
   lastUpdated?: string;
   paystackSubaccountCode: string;
+  averagePreparationTime?: number;
 }
 
 export interface RestaurantRegistrationData {

@@ -8,6 +8,7 @@ import { Order, OrderStatus } from "../types/order";
 import { MenuItem } from "../types/menu";
 import { restaurantService } from '../services/restaurantService';
 import { RestaurantProfile } from '../types/restaurant';
+import { notificationService } from '../services/notificationService';
 
 interface DashboardStats {
   totalOrders: number;
@@ -34,36 +35,30 @@ export default function RestaurantDashboard() {
       if (!user) return;
 
       try {
-        const todayOrders = await orderService.getOrders(user.uid, [
-          "delivered",
-          "pending",
-        ] as OrderStatus[]);
-        const pendingOrders = todayOrders.filter(
-          (order) => order.status === "pending"
-        );
-
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 
-        const todaysOrders = todayOrders.filter(
-          (order) => new Date(order.createdAt) >= todayStart
-        );
+        const [restaurantProfile, completedOrders, pendingOrders] = await Promise.all([
+          restaurantService.getRestaurantProfile(user.uid),
+          orderService.getOrders(user.uid, ["ready"] as OrderStatus[], todayStart),
+          orderService.getOrders(user.uid, ["pending"] as OrderStatus[])
+        ]);
 
-        const revenue = todaysOrders.reduce(
+        const revenue = completedOrders.reduce(
           (sum, order) => sum + order.total,
           0
         );
 
         setStats({
-          totalOrders: todayOrders.length,
+          totalOrders: completedOrders.length,
           pendingOrders: pendingOrders.length,
           todayRevenue: revenue,
-          averagePreparationTime: 25,
+          averagePreparationTime: restaurantProfile?.averagePreparationTime || 25,
         });
 
-        setRecentOrders(todayOrders.slice(0, 5));
+        setRecentOrders(completedOrders.slice(0, 5));
 
-        const itemCounts = todayOrders.reduce(
+        const itemCounts = completedOrders.reduce(
           (acc: Record<string, number>, order) => {
             order.items?.forEach((item) => {
               acc[item.name] = (acc[item.name] || 0) + item.quantity;
@@ -116,9 +111,22 @@ export default function RestaurantDashboard() {
     }
   }, [user]);
 
+  useEffect(() => {
+    const initializeNotifications = async () => {
+      if (!user?.uid) return;
+      
+      const token = await notificationService.initialize();
+      if (token) {
+        await notificationService.registerRestaurantDevice(user.uid, token);
+      }
+    };
+
+    initializeNotifications();
+  }, [user]);
+
   const statsCards = [
     {
-      title: "Today's Orders",
+      title: "Completed Orders Today",
       value: stats.totalOrders,
       icon: ShoppingBag,
       color: "bg-blue-500",
@@ -131,7 +139,7 @@ export default function RestaurantDashboard() {
     },
     {
       title: "Today's Revenue",
-      value: `₦${stats.todayRevenue.toFixed(2)}`,
+      value: `₦${stats.todayRevenue.toLocaleString()}`,
       icon: DollarSign,
       color: "bg-green-500",
     },
@@ -192,7 +200,9 @@ export default function RestaurantDashboard() {
                     <div className="text-right">
                       <p className="font-medium">₦{order.total.toFixed(2)}</p>
                       <p className="text-sm text-gray-500">
-                        {new Date(order.createdAt).toLocaleTimeString()}
+                        {typeof order.createdAt === 'string' 
+                          ? new Date(order.createdAt).toLocaleTimeString()
+                          : (order.createdAt as any).toDate().toLocaleTimeString()}
                       </p>
                     </div>
                   </div>

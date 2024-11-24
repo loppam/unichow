@@ -25,37 +25,41 @@ export interface Order {
   id: string;
   customerId: string;
   restaurantId: string;
-  items: OrderItem[];
-  status: OrderStatus;
-  total: number;
-  deliveryAddress: Address;
-  paymentMethod: PaymentMethod;
-  paymentStatus: PaymentStatus;
-  createdAt: string | FieldValue;
-  updatedAt: string | FieldValue;
-  acceptedAt?: string;
-  preparedAt?: string;
-  deliveredAt?: string;
-  cancelledAt?: string;
-  estimatedDeliveryTime?: string;
   customerName: string;
+  customerAddress: string;
+  items: OrderItem[];
+  total: number;
   subtotal: number;
   deliveryFee: number;
   serviceFee: number;
+  status: OrderStatus;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  createdAt: string;
+  updatedAt: string;
+  acceptedAt?: string;
+  preparedAt?: string;
   readyAt?: string;
-  customerPhone: string;
-  specialInstructions?: string;
+  deliveredAt?: string;
+  cancelledAt?: string;
+  estimatedDeliveryTime?: string;
+  deliveryAddress: {
+    address: string;
+    additionalInstructions?: string;
+  };
 }
 
 export interface OrderNotification {
   id: string;
   orderId: string;
-  message: string;
-  timestamp: string | Date;
-  read: boolean;
-  status: NotificationStatus;
+  customerName: string;
   amount: number;
-  customerName: ReactNode;
+  status: 'pending' | 'completed' | 'cancelled';
+  message: string;
+  timestamp: string;
+  read: boolean;
+  readAt?: string;
+  type: 'order';
 }
 
 export interface UserOrder extends Order {

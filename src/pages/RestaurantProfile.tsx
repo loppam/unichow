@@ -5,6 +5,8 @@ import { restaurantService } from '../services/restaurantService';
 import { toast } from 'react-hot-toast';
 import { RestaurantStatus } from '../types/restaurant';
 import { Address } from '../types/order';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 interface RestaurantProfile {
   id: string;
@@ -135,8 +137,20 @@ export default function RestaurantProfile() {
         { logo: logoFile, banner: bannerFile }
       );
 
-      toast.success('Profile updated successfully');
-      navigate('/restaurant-dashboard');
+      // Check if payment info is set up
+      const restaurantDoc = await getDoc(doc(db, 'restaurants', user.uid));
+      const restaurantData = restaurantDoc.data();
+
+      if (!restaurantData?.paymentInfo?.isVerified) {
+        toast.success('Profile updated successfully. Please set up your payment information to start receiving orders.', {
+          duration: 5000,
+          icon: '💳'
+        });
+        navigate('/restaurant-settings?section=payment');
+      } else {
+        toast.success('Profile updated successfully');
+        navigate('/restaurant-dashboard');
+      }
     } catch (err) {
       console.error('Error updating profile:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to update profile');

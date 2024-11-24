@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { paymentService } from '../../services/paymentService';
 import { RestaurantPaymentInfo, RestaurantData } from '../../types/restaurant';
+import { toast } from 'react-hot-toast';
 
 interface PaymentSetupProps {
   data: RestaurantData;
@@ -61,8 +62,11 @@ export default function PaymentSetup({ data }: PaymentSetupProps) {
         lastUpdated: new Date().toISOString()
       } as RestaurantPaymentInfo);
 
+      toast.success('Payment information setup successfully');
     } catch (error) {
-      setError('Failed to setup payment information');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to setup payment information';
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

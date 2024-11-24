@@ -4,6 +4,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import Logo from "../components/Logo";
+import { notificationService } from "../services/notificationService";
 
 export default function Login() {
   const location = useLocation();
@@ -80,6 +81,11 @@ export default function Login() {
           throw new Error("Your restaurant account is pending approval. We'll notify you via email once approved.");
         }
         navigate("/restaurant-dashboard");
+
+        const token = await notificationService.requestPermission(userCredential.user.uid);
+        if (token) {
+          await notificationService.saveToken(userCredential.user.uid, token);
+        }
       } else {
         navigate("/home");
       }

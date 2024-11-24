@@ -1,32 +1,39 @@
 import { db } from '../firebase/config';
-import { collection, doc, query, where, orderBy, limit, updateDoc, getDoc, getDocs, onSnapshot, increment, setDoc } from 'firebase/firestore';
+import { collection, doc, query, where, orderBy, limit, updateDoc, getDoc, getDocs, onSnapshot, increment, setDoc, QueryConstraint, deleteDoc, writeBatch } from 'firebase/firestore';
 import { Order, OrderStatus, OrderItem, Address, PaymentMethod, PaymentStatus, UserOrder } from '../types/order';
 import { notificationService } from './notificationService';
 
 export const orderService = {
   async getOrders(
     restaurantId: string, 
-    status?: OrderStatus[], 
-    page = 1, 
-    pageSize = 10
+    statuses: OrderStatus[], 
+    startDate?: Date
   ): Promise<Order[]> {
     try {
-      const skip = (page - 1) * pageSize;
-      let q = query(
-        collection(db, 'orders'),
-        where('restaurantId', '==', restaurantId),
-        orderBy('createdAt', 'desc'),
-        skip > 0 ? limit(skip + pageSize) : limit(pageSize)
-      );
+      const ordersRef = collection(db, "orders");
+      
+      let constraints: QueryConstraint[] = [
+        where("restaurantId", "==", restaurantId),
+        where("status", "in", statuses),
+        orderBy("createdAt", "desc")
+      ];
 
-      if (status && status.length > 0) {
-        q = query(q, where('status', 'in', status));
+      // Add date filter if startDate is provided
+      if (startDate) {
+        constraints.push(
+          where("createdAt", ">=", startDate.toISOString())
+        );
       }
 
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      const q = query(ordersRef, ...constraints);
+      const querySnapshot = await getDocs(q);
+
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Order[];
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error("Error getting orders:", error);
       throw error;
     }
   },
@@ -95,6 +102,7 @@ export const orderService = {
         amount: order.total,
         customerName: order.customerName,
         timestamp,
+        type: 'order',
         read: false
       });
 
@@ -125,56 +133,32 @@ export const orderService = {
     });
   },
 
-  async createOrder(data: {
-    customerId: string;
-    restaurantId: string;
-    items: OrderItem[];
-    deliveryAddress: Address;
-    paymentMethod: PaymentMethod;
-    customerName: string;
-    total: number;
-    subtotal: number;
-    deliveryFee: number;
-    serviceFee: number;
-    status: OrderStatus;
-    paymentStatus: PaymentStatus;
-    createdAt: string;
-    updatedAt: string;
-  }): Promise<string> {
-    const orderRef = doc(collection(db, 'orders'));
-    const timestamp = new Date().toISOString();
+  async createOrder(orderData: Omit<Order, 'id'>): Promise<Order> {
+    try {
+      const orderRef = doc(collection(db, 'orders'));
+      const order: Order = {
+        id: orderRef.id,
+        ...orderData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        status: 'pending'
+      };
 
-    // Calculate order total
-    const total = data.items.reduce(
-      (sum, item) => sum + (item.price * item.quantity),
-      0
-    );
+      // Create order first
+      await setDoc(orderRef, order);
 
-    // Create order and update restaurant stats in parallel
-    await Promise.all([
-      // Create order document
-      setDoc(orderRef, {
-        customerId: data.customerId,
-        restaurantId: data.restaurantId,
-        customerName: data.customerName,
-        items: data.items,
-        status: 'pending' as OrderStatus,
-        total,
-        deliveryAddress: data.deliveryAddress,
-        paymentMethod: data.paymentMethod,
-        paymentStatus: 'pending',
-        createdAt: timestamp,
-        updatedAt: timestamp
-      } as Order),
+      try {
+        // Attempt to send notification, but don't fail if it errors
+        await notificationService.sendNewOrderNotification(order.restaurantId, order);
+      } catch (notificationError) {
+        console.warn('Failed to send notification, but order was created:', notificationError);
+      }
 
-      // Update restaurant stats
-      updateDoc(doc(db, 'restaurants', data.restaurantId), {
-        totalOrders: increment(1),
-        updatedAt: timestamp
-      })
-    ]);
-
-    return orderRef.id;
+      return order;
+    } catch (error) {
+      console.error('Error creating order:', error);
+      throw error;
+    }
   },
 
   async updatePaymentStatus(
@@ -214,5 +198,81 @@ export const orderService = {
       console.error('Error fetching user orders:', error);
       throw error;
     }
-  }
+  },
+
+  async getRestaurantStats(restaurantId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    try {
+      const ordersRef = collection(db, "orders");
+      
+      // Get completed orders for today
+      const completedOrdersQuery = query(
+        ordersRef,
+        where("restaurantId", "==", restaurantId),
+        where("status", "==", "delivered"),
+        where("createdAt", ">=", today.toISOString()),
+        orderBy("createdAt", "desc")
+      );
+
+      // Get pending orders
+      const pendingOrdersQuery = query(
+        ordersRef,
+        where("restaurantId", "==", restaurantId),
+        where("status", "==", "pending")
+      );
+
+      // Get all completed orders for revenue and popular items
+      const allCompletedOrdersQuery = query(
+        ordersRef,
+        where("restaurantId", "==", restaurantId),
+        where("status", "==", "delivered"),
+        orderBy("createdAt", "desc"),
+        limit(50)
+      );
+
+      const [completedToday, pendingOrders, allCompleted] = await Promise.all([
+        getDocs(completedOrdersQuery),
+        getDocs(pendingOrdersQuery),
+        getDocs(allCompletedOrdersQuery)
+      ]);
+
+      // Calculate today's revenue from completed orders
+      const todayRevenue = completedToday.docs.reduce((acc, doc) => {
+        const order = doc.data();
+        return acc + order.total;
+      }, 0);
+
+      // Get popular items from completed orders
+      const itemCounts = new Map();
+      allCompleted.docs.forEach(doc => {
+        const order = doc.data();
+        order.items.forEach((item: any) => {
+          const count = itemCounts.get(item.id) || 0;
+          itemCounts.set(item.id, count + item.quantity);
+        });
+      });
+
+      return {
+        todayOrders: completedToday.docs.length,
+        pendingOrders: pendingOrders.docs.length,
+        todayRevenue,
+        recentOrders: allCompleted.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })),
+        popularItems: Array.from(itemCounts.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+      };
+    } catch (error) {
+      console.error("Error getting restaurant stats:", error);
+      throw error;
+    }
+  },
+
+  async deleteOrder(orderId: string): Promise<void> {
+    await deleteDoc(doc(db, 'orders', orderId));
+  },
 };

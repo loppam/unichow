@@ -9,6 +9,7 @@ import { auth, db } from "../firebase/config";
 import Logo from "../components/Logo";
 import Input from "../components/Input";
 import { ArrowLeft, Store, User as UserIcon } from "lucide-react"; // Import icons
+import { notificationService } from "../services/notificationService";
 
 const CUISINE_TYPES = ["Pastries", "Smoothies", "Fast Food"];
 
@@ -33,7 +34,7 @@ export default function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
+  
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
 
@@ -148,6 +149,12 @@ export default function Register() {
             additionalInstructions: ''
           }]
         });
+      }
+
+      // After restaurant login/registration
+      const token = await notificationService.requestPermission(userCredential.user.uid);
+      if (token) {
+        await notificationService.saveToken(userCredential.user.uid, token);
       }
     } catch (err) {
       console.error("Registration error:", err);

@@ -16,7 +16,7 @@ export const paymentService = {
           business_name: paymentInfo.accountName,
           settlement_bank: paymentInfo.bankName,
           account_number: paymentInfo.accountNumber,
-          percentage_charge: 90, // Platform takes 10%
+          percentage_charge: 0,
           description: `Restaurant ${restaurantId} subaccount`
         },
         {

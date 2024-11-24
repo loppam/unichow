@@ -1,13 +1,16 @@
 import { notificationService } from '../services/notificationService';
 
-export async function testNotification(userId: string) {
+export async function testNotification(userId: string, userType: 'restaurant' | 'user' = 'user') {
   try {
     const isSupported = await notificationService.isNotificationSupported();
     if (!isSupported) {
       throw new Error('Notifications are not supported in this environment');
     }
 
-    const token = await notificationService.requestPermission(userId);
+    const token = userType === 'restaurant' 
+      ? await notificationService.requestRestaurantPermission(userId)
+      : await notificationService.requestPermission(userId);
+      
     if (!token) {
       throw new Error('Failed to get notification token');
     }

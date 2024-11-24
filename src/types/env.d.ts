@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_VAPID_KEY: string;
   readonly VITE_FIREBASE_CLIENT_EMAIL: string;
   readonly VITE_FIREBASE_PRIVATE_KEY: string;
+  readonly VITE_PAYSTACK_PUBLIC_KEY: string;
+  readonly VITE_RIDER_ACCOUNT_CODE: string;
 }
 
 interface ImportMeta {

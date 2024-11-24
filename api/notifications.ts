@@ -30,7 +30,7 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { token, title, body } = req.body;
+    const { token, title, body, data } = req.body;
 
     if (!token || !title || !body) {
       return res.status(400).json({
@@ -45,6 +45,7 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
         title,
         body,
       },
+      data: data || {},
       webpush: {
         headers: {
           Urgency: 'high'
@@ -52,7 +53,16 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
         notification: {
           icon: '/whitefavicon192x192.png',
           badge: '/whitefavicon192x192.png',
-          requireInteraction: true
+          requireInteraction: true,
+          actions: [
+            {
+              action: 'view',
+              title: 'View Details'
+            }
+          ]
+        },
+        fcm_options: {
+          link: '/notifications'
         }
       }
     };

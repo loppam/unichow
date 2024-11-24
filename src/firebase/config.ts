@@ -65,8 +65,8 @@ export const functions = getFunctions(app, "us-central1");
 export const storage = getStorage(app);
 
 // Disable analytics to prevent ad blocker errors
-const analytics = getAnalytics(app);
-setAnalyticsCollectionEnabled(analytics, false);
+// const analytics = getAnalytics(app);
+// setAnalyticsCollectionEnabled(analytics, false);
 
 // Add these collections with type safety
 export const COLLECTIONS = {

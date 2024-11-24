@@ -8,6 +8,7 @@ interface DeliverySettingsProps {
   data: {
     minimumOrder: number;
     estimatedDeliveryTime?: string;
+    averagePreparationTime?: number;
   };
 }
 
@@ -16,7 +17,8 @@ export default function DeliverySettings({ data }: DeliverySettingsProps) {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
     minimumOrder: data?.minimumOrder || 0,
-    estimatedDeliveryTime: data?.estimatedDeliveryTime || '30-45'
+    estimatedDeliveryTime: data?.estimatedDeliveryTime || '30-45',
+    averagePreparationTime: data?.averagePreparationTime || 25
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,6 +40,7 @@ export default function DeliverySettings({ data }: DeliverySettingsProps) {
       await updateDoc(restaurantRef, {
         minimumOrder: settings.minimumOrder,
         estimatedDeliveryTime: settings.estimatedDeliveryTime,
+        averagePreparationTime: settings.averagePreparationTime,
         lastUpdated: new Date().toISOString()
       });
 
@@ -83,6 +86,23 @@ export default function DeliverySettings({ data }: DeliverySettingsProps) {
             required
           />
           <p className="text-xs text-gray-500 mt-1">Format: min-max (e.g., 30-45)</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Average Preparation Time (minutes)
+          </label>
+          <input
+            type="number"
+            name="averagePreparationTime"
+            value={settings.averagePreparationTime}
+            onChange={handleChange}
+            min="1"
+            max="120"
+            className="w-full p-2 border rounded-lg"
+            required
+          />
+          <p className="text-xs text-gray-500 mt-1">Average time to prepare an order</p>
         </div>
       </div>
 

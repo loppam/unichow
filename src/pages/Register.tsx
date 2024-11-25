@@ -4,7 +4,7 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import Logo from "../components/Logo";
 import Input from "../components/Input";
@@ -152,9 +152,11 @@ export default function Register() {
       }
 
       // After restaurant login/registration
-      const token = await notificationService.requestPermission(userCredential.user.uid);
-      if (token) {
-        await notificationService.saveToken(userCredential.user.uid, token);
+      const subscription = await notificationService.requestPermission(userCredential.user.uid);
+      if (subscription) {
+        await updateDoc(doc(db, 'restaurants', userCredential.user.uid), {
+          pushSubscription: JSON.stringify(subscription)
+        });
       }
     } catch (err) {
       console.error("Registration error:", err);

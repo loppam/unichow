@@ -205,11 +205,17 @@ export default function AdminSettings() {
               <button
                 onClick={async () => {
                   try {
-                    if (!user) return;
+                    if (!user) {
+                      toast.error('User not authenticated');
+                      return;
+                    }
+                    const loading = toast.loading('Setting up notifications...');
                     await testNotification(user.uid);
+                    toast.dismiss(loading);
                     toast.success('Test notification sent successfully!');
                   } catch (error: any) {
                     toast.error(error?.message || 'Failed to send test notification');
+                    console.error('Notification error:', error);
                   }
                 }}
                 className="px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800"

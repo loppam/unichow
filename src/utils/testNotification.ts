@@ -2,9 +2,9 @@ import { notificationService } from '../services/notificationService';
 
 export async function testNotification(userId: string, userType: 'restaurant' | 'user' = 'user') {
   try {
-    const isSupported = await notificationService.isNotificationSupported();
-    if (!isSupported) {
-      throw new Error('Notifications are not supported in this environment');
+    const initResult = await notificationService.initialize();
+    if (!initResult) {
+      throw new Error('Failed to initialize notification service');
     }
 
     const token = userType === 'restaurant' 
@@ -32,13 +32,8 @@ export async function testNotification(userId: string, userType: 'restaurant' | 
       throw new Error(data.details || data.error || 'Failed to send test notification');
     }
 
-    try {
-      const data = await response.json();
-      return data.success;
-    } catch (error) {
-      console.error('Test notification failed:', error);
-      throw error;
-    }
+    const data = await response.json();
+    return data.success;
   } catch (error) {
     console.error('Test notification failed:', error);
     throw error;

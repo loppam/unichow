@@ -1,6 +1,6 @@
 import { db } from '../firebase/config';
 import { collection, doc, query, where, orderBy, limit, updateDoc, getDoc, getDocs, onSnapshot, setDoc, QueryConstraint, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Order, OrderStatus, Address, PaymentStatus, UserOrder } from '../types/order';
+import { Order, OrderStatus, Address, PaymentStatus, UserOrder, OrderNotification } from '../types/order';
 import { notificationService } from './notificationService';
 
 export const orderService = {
@@ -94,17 +94,19 @@ export const orderService = {
       await updateDoc(orderRef, updates);
 
       // Create notification
-      await notificationService.createOrderNotification(restaurantId, {
+      await notificationService.sendNewOrderNotification(restaurantId, {
+        id: Date.now().toString(),
         orderId,
         message: `Order #${orderId.slice(-6)} has been ${status}`,
-        status: ['ready', 'delivered'].includes(status) ? 'completed' :
-          ['accepted', 'preparing'].includes(status) ? 'pending' : 'cancelled',
+        status: status === 'cancelled' ? 'cancelled' :
+               ['ready', 'delivered'].includes(status) ? 'delivered' :
+               'pending',
         amount: order.total,
         customerName: order.customerName,
         timestamp,
         type: 'order',
         read: false
-      });
+      } as OrderNotification);
 
       return updates;
     } catch (error) {

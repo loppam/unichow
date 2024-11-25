@@ -18,8 +18,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     checkPermission();
-    if (user) {
-      notificationService.setupForegroundListener();
+    if (user && 'serviceWorker' in navigator) {
+      try {
+        notificationService.setupForegroundListener();
+      } catch (error) {
+        console.error('Error setting up foreground listener:', error);
+      }
     }
   }, [user]);
 

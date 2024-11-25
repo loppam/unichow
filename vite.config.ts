@@ -2,17 +2,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path';
+import fs from 'fs';
 
 export default defineConfig({
-  define: {
-    __VITE_FIREBASE_API_KEY__: JSON.stringify(process.env.VITE_FIREBASE_API_KEY),
-    __VITE_FIREBASE_AUTH_DOMAIN__: JSON.stringify(process.env.VITE_FIREBASE_AUTH_DOMAIN),
-    __VITE_FIREBASE_PROJECT_ID__: JSON.stringify(process.env.VITE_FIREBASE_PROJECT_ID),
-    __VITE_FIREBASE_STORAGE_BUCKET__: JSON.stringify(process.env.VITE_FIREBASE_STORAGE_BUCKET),
-    __VITE_FIREBASE_MESSAGING_SENDER_ID__: JSON.stringify(process.env.VITE_FIREBASE_MESSAGING_SENDER_ID),
-    __VITE_FIREBASE_APP_ID__: JSON.stringify(process.env.VITE_FIREBASE_APP_ID),
-    __VITE_FIREBASE_MEASUREMENT_ID__: JSON.stringify(process.env.VITE_FIREBASE_MEASUREMENT_ID),
-  },
   plugins: [
     react(),
     VitePWA({
@@ -30,7 +23,24 @@ export default defineConfig({
             options: {
               cacheName: 'firebase-cache'
             }
+          },
+          {
+            urlPattern: /^https:\/\/fcm\.googleapis\.com\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'fcm-cache'
+            }
+          },
+          {
+            urlPattern: /^https:\/\/www\.googleapis\.com\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'google-apis-cache'
+            }
           }
+        ],
+        additionalManifestEntries: [
+          { url: '/firebase-config.json', revision: Date.now().toString() }
         ]
       },
       manifest: {
@@ -48,13 +58,22 @@ export default defineConfig({
             sizes: '512x512',
             type: 'image/png',
           },
-        ],
-      },
-      devOptions: {
-        enabled: true,
-        type: 'module'
-      },
+        ]
+      }
     }),
-  ],
+    {
+      name: 'replace-env-vars',
+      writeBundle() {
+        const configPath = path.resolve(__dirname, 'dist/firebase-config.json');
+        const config = fs.readFileSync(configPath, 'utf-8');
+        const replaced = config
+          .replace('__VITE_FIREBASE_API_KEY__', process.env.VITE_FIREBASE_API_KEY || '')
+          .replace('__VITE_FIREBASE_PROJECT_ID__', process.env.VITE_FIREBASE_PROJECT_ID || '')
+          .replace('__VITE_FIREBASE_MESSAGING_SENDER_ID__', process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '')
+          .replace('__VITE_FIREBASE_APP_ID__', process.env.VITE_FIREBASE_APP_ID || '');
+        fs.writeFileSync(configPath, replaced);
+      }
+    }
+  ]
 });
 

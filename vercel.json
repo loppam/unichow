@@ -6,7 +6,8 @@
       "headers": {
         "cache-control": "public, max-age=0, must-revalidate",
         "Service-Worker-Allowed": "/",
-        "content-type": "application/javascript; charset=utf-8"
+        "content-type": "application/javascript; charset=utf-8",
+        "Access-Control-Allow-Origin": "*"
       },
       "dest": "/firebase-messaging-sw.js"
     },

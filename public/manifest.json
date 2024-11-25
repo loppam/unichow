@@ -35,5 +35,6 @@
       "sizes": "720x1280",
       "type": "image/png"
     }
-  ]
+  ],
+  "gcm_sender_id": "103953800507"
 }

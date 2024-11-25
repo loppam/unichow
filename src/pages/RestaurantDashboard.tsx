@@ -9,6 +9,7 @@ import { MenuItem } from "../types/menu";
 import { restaurantService } from '../services/restaurantService';
 import { RestaurantProfile } from '../types/restaurant';
 import { notificationService } from '../services/notificationService';
+import { toast } from 'react-hot-toast';
 
 interface DashboardStats {
   totalOrders: number;
@@ -117,7 +118,7 @@ export default function RestaurantDashboard() {
       
       const token = await notificationService.initialize();
       if (token) {
-        await notificationService.registerRestaurantDevice(user.uid, token);
+        await notificationService.requestPermission(user.uid);
       }
     };
 
@@ -150,6 +151,42 @@ export default function RestaurantDashboard() {
       color: "bg-purple-500",
     },
   ];
+
+  function TestOrderNotification() {
+    const { user } = useAuth();
+    
+    const handleTest = async () => {
+      if (!user) return;
+      
+      try {
+        await notificationService.sendNewOrderNotification(user.uid, {
+          id: Date.now().toString(),
+          orderId: 'test-123',
+          message: 'New test order received!',
+          status: 'pending',
+          amount: 99.99,
+          customerName: 'Test Customer',
+          timestamp: new Date().toISOString(),
+          type: 'order',
+          read: false
+        });
+        
+        toast.success('Test notification sent!');
+      } catch (error) {
+        console.error('Test failed:', error);
+        toast.error('Failed to send test notification');
+      }
+    };
+
+    return (
+      <button
+        onClick={handleTest}
+        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+      >
+        Test Order Notification
+      </button>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -233,6 +270,7 @@ export default function RestaurantDashboard() {
       </div>
 
       <RestaurantNavigation />
+      <TestOrderNotification />
     </div>
   );
 }

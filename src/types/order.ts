@@ -61,6 +61,7 @@ export interface Order {
 export interface OrderNotification {
   id: string;
   orderId: string;
+  customerId: string;
   customerName: string;
   amount: number;
   status: 'pending' | 'completed' | 'cancelled';

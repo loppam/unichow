@@ -37,9 +37,11 @@ export function OrderNotificationProvider({ children }: { children: React.ReactN
       (newNotifications) => {
         setNotifications(newNotifications);
         
-        // Play sound for new notifications
+        // Play sound for new notifications when in foreground
         if (playSound && newNotifications.length > notifications.length) {
-          notificationSound.play().catch(console.error);
+          notificationSound.play().catch(error => {
+            console.error('Error playing notification sound:', error);
+          });
         }
       }
     );

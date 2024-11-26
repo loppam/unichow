@@ -80,9 +80,9 @@ export default function Home() {
                 key={restaurant.id}
                 id={restaurant.id}
                 name={restaurant.restaurantName}
-                image={restaurant.logo || ""}
+                image={restaurant.logo || "/default-restaurant.jpeg"}
                 rating={restaurant.rating}
-                deliveryTime={`${restaurant.openingHours} - ${restaurant.closingHours}`}
+                averagePreparationTime={restaurant.averagePreparationTime}
                 minimumOrder={restaurant.minimumOrder || 0}
               />
             ))}

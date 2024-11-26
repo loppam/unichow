@@ -1,13 +1,40 @@
 import React, { useState } from 'react';
-import { Bell } from 'lucide-react';
-import { useNotifications } from '../contexts/NotificationContext';
+import { Bell, Trash2, X, Check, CheckCheck } from 'lucide-react';
+import { useOrderNotifications } from '../contexts/OrderNotificationContext';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { notificationService } from '../services/notificationService';
+import { toast } from 'react-hot-toast';
 
 export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications = [], unreadCount = 0, markAsRead, markAllAsRead } = useOrderNotifications();
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   const handleMarkAsRead = async (notificationId: string) => {
     await markAsRead(notificationId);
+  };
+
+  const handleDeleteAll = async () => {
+    if (!user) return;
+    try {
+      await notificationService.deleteAllNotifications(user.uid);
+      toast.success('All notifications deleted');
+    } catch (error) {
+      toast.error('Failed to delete all notifications');
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, notificationId: string) => {
+    e.stopPropagation();
+    if (!user) return;
+    try {
+      await notificationService.deleteNotification(user.uid, notificationId);
+      toast.success('Notification deleted');
+    } catch (error) {
+      toast.error('Failed to delete notification');
+    }
   };
 
   return (
@@ -30,12 +57,22 @@ export default function NotificationBell() {
             <div className="flex justify-between items-center">
               <h3 className="font-semibold">Notifications</h3>
               {notifications.length > 0 && (
-                <button
-                  onClick={() => markAllAsRead()}
-                  className="text-sm text-gray-500 hover:text-gray-700"
-                >
-                  Mark all as read
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => markAllAsRead()}
+                    className="text-sm text-blue-500 hover:text-blue-700 flex items-center gap-1"
+                    title="Mark all as read"
+                  >
+                    <CheckCheck className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={handleDeleteAll}
+                    className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1"
+                    title="Delete all"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -51,7 +88,7 @@ export default function NotificationBell() {
                   key={notification.id}
                   className={`p-4 border-b last:border-b-0 ${
                     !notification.read ? 'bg-blue-50' : ''
-                  }`}
+                  } relative group`}
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
@@ -60,14 +97,24 @@ export default function NotificationBell() {
                         {new Date(notification.timestamp).toLocaleDateString()}
                       </p>
                     </div>
-                    {!notification.read && (
+                    <div className="flex items-center gap-2">
+                      {!notification.read && (
+                        <button
+                          onClick={() => handleMarkAsRead(notification.id)}
+                          className="text-blue-500 hover:text-blue-700 p-1 rounded-full hover:bg-gray-100"
+                          title="Mark as read"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleMarkAsRead(notification.id)}
-                        className="text-xs text-blue-500 hover:text-blue-700"
+                        onClick={(e) => handleDelete(e, notification.id)}
+                        className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100"
+                        title="Delete notification"
                       >
-                        Mark as read
+                        <X className="h-4 w-4" />
                       </button>
-                    )}
+                    </div>
                   </div>
                 </div>
               ))

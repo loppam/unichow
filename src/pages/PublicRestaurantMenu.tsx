@@ -3,8 +3,9 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { MenuItem, MenuCategory } from '../types/menu';
-import { Plus } from 'lucide-react';
+import { Plus, ArrowLeft } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
+import { realtimeService } from '../services/realtimeService';
 
 interface RestaurantData {
   restaurantName: string;
@@ -39,13 +40,13 @@ export default function PublicRestaurantMenu() {
   const restaurantPacks = packs.filter(pack => pack.restaurantId === id);
   const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
 
+  // Fetch restaurant data and categories
   useEffect(() => {
-    const fetchRestaurantAndMenu = async () => {
-      if (!id) return;
+    if (!id) return;
 
+    const fetchRestaurantData = async () => {
       try {
         setLoading(true);
-        // Change from 'users' to 'restaurants' collection
         const restaurantDoc = await getDoc(doc(db, 'restaurants', id));
         if (!restaurantDoc.exists()) {
           setError('Restaurant not found');
@@ -53,23 +54,13 @@ export default function PublicRestaurantMenu() {
         }
         setRestaurant(restaurantDoc.data() as RestaurantData);
 
-        // Update these paths as well
+        // Fetch categories
         const categoriesSnapshot = await getDocs(collection(db, `restaurants/${id}/categories`));
-        const menuSnapshot = await getDocs(collection(db, `restaurants/${id}/menu`));
-
-        // Rest of your code remains the same
         const categoriesData = categoriesSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as MenuCategory[];
         setCategories(categoriesData);
-
-        const menuData = menuSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as MenuItem[];
-        setMenuItems(menuData.filter(item => item.isAvailable));
-
       } catch (err) {
         console.error('Error fetching restaurant data:', err);
         setError('Failed to load restaurant menu');
@@ -78,7 +69,21 @@ export default function PublicRestaurantMenu() {
       }
     };
 
-    fetchRestaurantAndMenu();
+    fetchRestaurantData();
+  }, [id]);
+
+  // Subscribe to menu updates
+  useEffect(() => {
+    if (!id) return;
+
+    const unsubscribe = realtimeService.subscribeToMenu(
+      id,
+      (updatedItems: MenuItem[]) => {
+        setMenuItems(updatedItems.filter(item => item.isAvailable));
+      }
+    );
+
+    return () => unsubscribe();
   }, [id]);
 
   useEffect(() => {
@@ -145,20 +150,33 @@ export default function PublicRestaurantMenu() {
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Restaurant Header */}
       <div className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto p-6">
-          <h1 className="text-2xl font-bold mb-2">{restaurant.restaurantName}</h1>
-          <p className="text-gray-600 mb-4">{restaurant.description}</p>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {restaurant.cuisineTypes?.map((cuisine) => (
-              <span key={cuisine} className="bg-gray-100 px-3 py-1 rounded-full text-sm">
-                {cuisine}
-              </span>
-            ))}
+        <div className="max-w-4xl mx-auto">
+          {/* Back button and Restaurant Name */}
+          <div className="flex items-center gap-3 p-4">
+            <button
+              onClick={() => navigate(-1)}
+              className="p-2 hover:bg-gray-100 rounded-full"
+            >
+              <ArrowLeft className="h-6 w-6" />
+            </button>
+            <h1 className="text-2xl font-bold">{restaurant?.restaurantName}</h1>
           </div>
-          <div className="text-sm text-gray-600">
-            <p>📍 {restaurant.address}</p>
-            <p>⏰ {restaurant.openingHours} - {restaurant.closingHours}</p>
-            <p>📞 {restaurant.phone}</p>
+
+          {/* Restaurant Details */}
+          <div className="px-6 pb-6">
+            <p className="text-gray-600 mb-4">{restaurant?.description}</p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {restaurant?.cuisineTypes?.map((cuisine) => (
+                <span key={cuisine} className="bg-gray-100 px-3 py-1 rounded-full text-sm">
+                  {cuisine}
+                </span>
+              ))}
+            </div>
+            <div className="text-sm text-gray-600">
+              <p>📍 {restaurant?.address}</p>
+              <p>⏰ {restaurant?.openingHours} - {restaurant?.closingHours}</p>
+              <p>📞 {restaurant?.phone}</p>
+            </div>
           </div>
         </div>
       </div>

@@ -276,7 +276,7 @@ export const orderService = {
   ): Promise<string> {
     try {
       const orderRef = await addDoc(collection(db, "orders"), {
-        customerId: userId,
+        userId,
         restaurantId: orderData.restaurantId,
         status: "pending",
         packs: orderData.packs,
@@ -297,21 +297,4 @@ export const orderService = {
       throw error;
     }
   },
-
-  subscribeToUserOrders(userId: string, callback: (orders: Order[]) => void) {
-    const q = query(
-      collection(db, "orders"),
-      where("userId", "==", userId),
-      where("status", "in", ["pending", "accepted", "ready", "delivered"]),
-      orderBy("createdAt", "desc")
-    );
-
-    return onSnapshot(q, (snapshot) => {
-      const orders = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }) as Order);
-      callback(orders);
-    });
-  }
 };

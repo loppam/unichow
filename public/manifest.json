@@ -36,9 +36,5 @@
       "type": "image/png"
     }
   ],
-  "notifications": {
-    "vibrate": [200, 100, 200],
-    "silent": false
-  },
   "gcm_sender_id": "103953800507"
 }

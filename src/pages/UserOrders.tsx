@@ -20,12 +20,9 @@ export default function UserOrders() {
   useEffect(() => {
     if (!user) return;
     
-    console.log('Setting up subscription for user:', user.uid);
-    
     const unsubscribe = realtimeService.subscribeToUserOrders(
       user.uid,
       (updatedOrders) => {
-        console.log('Received updated orders:', updatedOrders);
         setOrders(updatedOrders as UserOrder[]);
         setLoading(false);
       }

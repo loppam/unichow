@@ -74,28 +74,6 @@ export default defineConfig({
         fs.writeFileSync(configPath, replaced);
       }
     }
-  ],
-  build: {
-    assetsDir: 'assets',
-    rollupOptions: {
-      output: {
-        assetFileNames: (assetInfo) => {
-          if (!assetInfo.name) return 'assets/[name].[hash][extname]';
-          
-          if (/\.(png|jpe?g|svg|gif|tiff|bmp|ico)$/i.test(assetInfo.name)) {
-            return 'assets/[name].[hash][extname]';
-          }
-          
-          return 'assets/[name].[hash][extname]';
-        }
-      }
-    }
-  },
-  publicDir: 'public',
-  server: {
-    fs: {
-      strict: true,
-    }
-  }
+  ]
 });
 

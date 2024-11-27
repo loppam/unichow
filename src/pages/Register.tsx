@@ -151,12 +151,12 @@ export default function Register() {
         });
       }
 
-      // After restaurant registration
-      if (userType === "restaurant") {
-        const subscription = await notificationService.requestPermission(userCredential.user.uid);
-        if (!subscription) {
-          console.error('Failed to initialize push notifications');
-        }
+      // After restaurant login/registration
+      const subscription = await notificationService.requestPermission(userCredential.user.uid);
+      if (subscription) {
+        await updateDoc(doc(db, 'restaurants', userCredential.user.uid), {
+          pushSubscription: JSON.stringify(subscription)
+        });
       }
     } catch (err) {
       console.error("Registration error:", err);

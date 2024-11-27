@@ -10,8 +10,6 @@ import { restaurantService } from '../services/restaurantService';
 import { RestaurantProfile } from '../types/restaurant';
 import { notificationService } from '../services/notificationService';
 import { toast } from 'react-hot-toast';
-import { getDoc, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase/config';
 
 interface DashboardStats {
   totalOrders: number;
@@ -118,20 +116,9 @@ export default function RestaurantDashboard() {
     const initializeNotifications = async () => {
       if (!user?.uid) return;
       
-      try {
-        // Check if subscription exists
-        const restaurantDoc = await getDoc(doc(db, "restaurants", user.uid));
-        const existingSubscription = restaurantDoc.data()?.pushSubscription;
-        
-        if (!existingSubscription) {
-          // Request new subscription if none exists
-          const subscription = await notificationService.requestPermission(user.uid);
-          if (!subscription) {
-            console.error('Failed to initialize push notifications');
-          }
-        }
-      } catch (error) {
-        console.error('Error initializing notifications:', error);
+      const token = await notificationService.initialize();
+      if (token) {
+        await notificationService.requestPermission(user.uid);
       }
     };
 
@@ -179,7 +166,6 @@ export default function RestaurantDashboard() {
           status: 'pending',
           amount: 99.99,
           customerName: 'Test Customer',
-          customerId: user.uid,
           timestamp: new Date().toISOString(),
           type: 'order',
           read: false
@@ -198,42 +184,6 @@ export default function RestaurantDashboard() {
         className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
       >
         Test Order Notification
-      </button>
-    );
-  }
-
-  function EnableNotifications() {
-    const { user } = useAuth();
-    
-    const handleEnable = async () => {
-      if (!user) return;
-      
-      try {
-        // First initialize service worker
-        const result = await notificationService.initialize();
-        if (!result) {
-          throw new Error('Failed to initialize notification service');
-        }
-        
-        // Then request permission and save subscription
-        const subscription = await notificationService.requestPermission(user.uid);
-        if (!subscription) {
-          throw new Error('Failed to get notification subscription');
-        }
-        
-        toast.success('Notifications enabled successfully!');
-      } catch (error) {
-        console.error('Enable notifications failed:', error);
-        toast.error('Failed to enable notifications');
-      }
-    };
-
-    return (
-      <button
-        onClick={handleEnable}
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        Enable Notifications
       </button>
     );
   }
@@ -320,10 +270,7 @@ export default function RestaurantDashboard() {
       </div>
 
       <RestaurantNavigation />
-      <div className="flex gap-2 p-4">
-        <EnableNotifications />
-        <TestOrderNotification />
-      </div>
+      <TestOrderNotification />
     </div>
   );
 }

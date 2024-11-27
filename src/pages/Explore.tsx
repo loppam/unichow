@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Search, Filter, X } from "lucide-react";
-import { collection, query, getDocs, where } from "firebase/firestore";
+import { collection, query, getDocs, where, orderBy } from "firebase/firestore";
 import { db } from "../firebase/config";
 import BottomNav from "../components/BottomNav";
 import RestaurantCard from "../components/RestaurantCard";
@@ -15,11 +15,6 @@ interface Restaurant {
   image: string;
   isOpen: boolean;
   description: string;
-  openingHours: string;
-  closingHours: string;
-  minimumOrder: number;
-  logo?: string;
-  averagePreparationTime?: number;
 }
 
 export default function Explore() {
@@ -175,12 +170,9 @@ export default function Explore() {
             {filteredRestaurants.map((restaurant) => (
               <RestaurantCard
                 key={restaurant.id}
-                id={restaurant.id}
                 name={restaurant.restaurantName}
-                image={restaurant.logo || "/default-restaurant.jpeg"}
-                rating={restaurant.rating}
-                averagePreparationTime={restaurant.averagePreparationTime}
-                minimumOrder={restaurant.minimumOrder || 0}
+                {...restaurant}
+                minOrder={`₦${restaurant.minOrder}`}
               />
             ))}
           </div>

@@ -24,7 +24,7 @@ const requiredEnvVars = [
   "VITE_FIREBASE_MESSAGING_SENDER_ID",
   "VITE_FIREBASE_APP_ID",
   "VITE_FIREBASE_MEASUREMENT_ID",
-  "VITE_FIREBASE_VAPID_PUBLIC_KEY",
+  "VITE_FIREBASE_VAPID_KEY",
 ] as const;
 
 requiredEnvVars.forEach((varName) => {

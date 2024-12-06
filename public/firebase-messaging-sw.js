@@ -1,64 +1,65 @@
-importScripts('https://www.gstatic.com/firebasejs/9.x.x/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.x.x/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-// We'll fetch the config dynamically
-let firebaseConfig = null;
+// Initialize Firebase with required config only
+firebase.initializeApp({
+  apiKey: '__VITE_FIREBASE_API_KEY__',
+  projectId: '__VITE_FIREBASE_PROJECT_ID__',
+  messagingSenderId: '__VITE_FIREBASE_MESSAGING_SENDER_ID__',
+  appId: '__VITE_FIREBASE_APP_ID__',
+  vapidKey: '__VITE_FIREBASE_VAPID_PUBLIC_KEY__'
+});
 
-async function initializeFirebase() {
-  try {
-    const response = await fetch('/firebase-config.json');
-    firebaseConfig = await response.json();
-    
-    firebase.initializeApp({
-      messagingSenderId: firebaseConfig.messagingSenderId,
-      apiKey: firebaseConfig.apiKey,
-      projectId: firebaseConfig.projectId,
-      appId: firebaseConfig.appId
-    });
-    
-    const messaging = firebase.messaging();
-    
-    messaging.onBackgroundMessage((payload) => {
-      console.log('Received background message:', payload);
-      
-      const notificationTitle = payload.notification?.title || "New Notification";
-      const notificationOptions = {
-        body: payload.notification?.body,
-        icon: '/whitefavicon192x192.png',
-        badge: '/whitefavicon192x192.png',
-        data: payload.data,
-        requireInteraction: true,
-        actions: [
-          {
-            action: 'view',
-            title: 'View Details'
-          }
-        ]
-      };
+const messaging = firebase.messaging();
 
-      self.registration.showNotification(notificationTitle, notificationOptions);
-    });
-  } catch (error) {
-    console.error('Failed to initialize Firebase:', error);
-  }
-}
+// Play notification sound
+const playNotificationSound = () => {
+  const audio = new Audio('/notification-sound.mp3');
+  return audio.play().catch(error => {
+    console.error('Error playing sound:', error);
+  });
+};
 
-initializeFirebase();
-
-self.addEventListener('push', function(event) {
-  const options = {
-    body: event.data.text(),
+messaging.onBackgroundMessage((payload) => {
+  console.log('Received background message:', payload);
+  
+  const notificationTitle = payload.notification?.title || "New Notification";
+  const notificationOptions = {
+    body: payload.notification?.body,
     icon: '/whitefavicon192x192.png',
     badge: '/whitefavicon192x192.png',
-    vibrate: [100, 50, 100],
-    data: {
-      dateOfArrival: Date.now(),
-      primaryKey: 1
-    }
+    data: payload.data,
+    vibrate: [200, 100, 200],
+    requireInteraction: true,
+    silent: false // This ensures the default notification sound plays
   };
 
+  // Play our custom sound
+  playNotificationSound();
+
+  self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+self.addEventListener('push', function(event) {
+  const data = event.data.json();
+  const options = {
+    body: data.body,
+    icon: '/whitefavicon192x192.png',
+    badge: '/whitefavicon192x192.png',
+    vibrate: [200, 100, 200],
+    data: data.data || {
+      dateOfArrival: Date.now(),
+      primaryKey: 1
+    },
+    requireInteraction: true,
+    silent: false // This ensures the default notification sound plays
+  };
+
+  // Play our custom sound
+  playNotificationSound();
+
   event.waitUntil(
-    self.registration.showNotification('New Order', options)
+    self.registration.showNotification(data.title || 'New Order', options)
   );
 });
 

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Bell } from 'lucide-react';
-import { useNotifications } from '../contexts/NotificationContext';
+import { useOrderNotifications } from '../contexts/OrderNotificationContext';
 
 export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications = [], unreadCount = 0, markAsRead, markAllAsRead } = useOrderNotifications() || {};
 
   const handleMarkAsRead = async (notificationId: string) => {
-    await markAsRead(notificationId);
+    if (markAsRead) {
+      await markAsRead(notificationId);
+    }
   };
 
   return (
@@ -24,12 +26,12 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {isOpen && (
+      {isOpen && notifications && (
         <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border z-50">
           <div className="p-4 border-b">
             <div className="flex justify-between items-center">
               <h3 className="font-semibold">Notifications</h3>
-              {notifications.length > 0 && (
+              {notifications.length > 0 && markAllAsRead && (
                 <button
                   onClick={() => markAllAsRead()}
                   className="text-sm text-gray-500 hover:text-gray-700"
@@ -41,7 +43,7 @@ export default function NotificationBell() {
           </div>
 
           <div className="max-h-96 overflow-y-auto">
-            {notifications.length === 0 ? (
+            {!notifications.length ? (
               <div className="p-4 text-center text-gray-500">
                 No notifications
               </div>

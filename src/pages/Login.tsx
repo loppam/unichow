@@ -81,6 +81,18 @@ export default function Login() {
           throw new Error("Your restaurant account is pending approval. We'll notify you via email once approved.");
         }
         navigate("/restaurant-dashboard");
+      } else if (userData.userType === "rider") {
+        const riderDoc = await getDoc(doc(db, "riders", userCredential.user.uid));
+        if (!riderDoc.exists()) {
+          throw new Error("Rider profile not found");
+        }
+
+        if (!riderDoc.data().isVerified) {
+          await auth.signOut();
+          throw new Error("Your rider account is pending verification. We'll notify you via email once verified.");
+        }
+        
+        navigate("/rider/dashboard");
       } else {
         navigate("/home");
       }

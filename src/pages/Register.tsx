@@ -8,13 +8,15 @@ import { doc, setDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import Logo from "../components/Logo";
 import Input from "../components/Input";
-import { ArrowLeft, Store, User as UserIcon } from "lucide-react"; // Import icons
+import { ArrowLeft, Store, User as UserIcon, Bike } from "lucide-react"; // Import icons
 import { notificationService } from "../services/notificationService";
 
 const CUISINE_TYPES = ["Pastries", "Smoothies", "Fast Food"];
 
 export default function Register() {
-  const [userType, setUserType] = useState<"user" | "restaurant" | null>(null);
+  const [userType, setUserType] = useState<
+    "user" | "restaurant" | "rider" | null
+  >(null);
   const [formData, setFormData] = useState({
     phone: "",
     email: "",
@@ -30,21 +32,19 @@ export default function Register() {
     openingHours: "",
     closingHours: "",
     minimumOrder: 0,
+    vehicleType: "motorcycle",
+    vehiclePlate: "",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
 
-    if (name === "phone") {
-      // Remove any non-digit characters as user types
-      const cleaned = value.replace(/\D/g, "");
-      setFormData((prev) => ({ ...prev, [name]: cleaned }));
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,6 +90,20 @@ export default function Register() {
           name: `${formData.firstName} ${formData.lastName}`,
           phoneNumber: formData.phone,
           defaultAddress: formData.address,
+        }),
+        ...(userType === "rider" && {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phone: formData.phone,
+          vehicleType: formData.vehicleType,
+          vehiclePlate: formData.vehiclePlate,
+          status: "offline",
+          isVerified: false,
+          rating: 0,
+          totalDeliveries: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         }),
       };
 
@@ -143,19 +157,23 @@ export default function Register() {
           email: formData.email,
           name: `${formData.firstName} ${formData.lastName}`,
           phone: formData.phone,
-          savedAddresses: [{
-            id: Date.now().toString(),
-            address: formData.address,
-            additionalInstructions: ''
-          }]
+          savedAddresses: [
+            {
+              id: Date.now().toString(),
+              address: formData.address,
+              additionalInstructions: "",
+            },
+          ],
         });
       }
 
       // After restaurant login/registration
-      const subscription = await notificationService.requestPermission(userCredential.user.uid);
+      const subscription = await notificationService.requestPermission(
+        userCredential.user.uid
+      );
       if (subscription) {
-        await updateDoc(doc(db, 'restaurants', userCredential.user.uid), {
-          pushSubscription: JSON.stringify(subscription)
+        await updateDoc(doc(db, "restaurants", userCredential.user.uid), {
+          pushSubscription: JSON.stringify(subscription),
         });
       }
     } catch (err) {
@@ -263,6 +281,24 @@ export default function Register() {
                   List your restaurant and receive orders
                 </p>
               </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setUserType("rider")}
+              className={`p-6 border rounded-lg text-center ${
+                userType === "rider"
+                  ? "border-blue-500 bg-blue-50"
+                  : "hover:border-gray-300"
+              }`}
+            >
+              <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <Bike className="h-6 w-6 text-blue-600" />
+              </div>
+              <h3 className="font-medium">Delivery Rider</h3>
+              <p className="text-sm text-gray-500 mt-2">
+                Join as a delivery partner
+              </p>
             </button>
           </div>
         </div>
@@ -391,10 +427,49 @@ export default function Register() {
                     required
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Minimum amount customers must order</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Minimum amount customers must order
+                </p>
               </div>
             </>
           ) : null}
+
+          {userType === "rider" && (
+            <>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Vehicle Type *
+                  </label>
+                  <select
+                    name="vehicleType"
+                    value={formData.vehicleType}
+                    onChange={handleChange}
+                    className="w-full p-2 border rounded-lg"
+                    required
+                  >
+                    <option value="motorcycle">Motorcycle</option>
+                    <option value="bicycle">Bicycle</option>
+                    <option value="car">Car</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Vehicle Plate Number *
+                  </label>
+                  <input
+                    type="text"
+                    name="vehiclePlate"
+                    value={formData.vehiclePlate}
+                    onChange={handleChange}
+                    className="w-full p-2 border rounded-lg"
+                    required
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Common fields for both types */}
           <Input

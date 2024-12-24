@@ -38,7 +38,7 @@ export default function SystemHealth() {
     return () => clearInterval(interval);
   }, []);
 
-  if (loading) {
+  if (loading ) {
     return <div>Loading...</div>;
   }
 

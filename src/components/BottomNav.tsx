@@ -15,7 +15,7 @@ export default function BottomNav() {
             isActive("/home") ? "text-black" : "text-gray-400"
           }`}
         >
-          <Home size={20}  />
+          <Home size={20} />
           <span className="text-xs mt-1 truncate">Home</span>
         </Link>
         <Link
@@ -42,7 +42,7 @@ export default function BottomNav() {
             isActive("/profile") ? "text-black" : "text-gray-400"
           }`}
         >
-          <User size={20} />
+          <User size={20}/>
           <span className="text-xs mt-1 truncate">Profile</span>
         </Link>
       </div>

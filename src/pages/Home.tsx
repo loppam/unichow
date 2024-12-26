@@ -10,6 +10,7 @@ export default function Home() {
   const [restaurants, setRestaurants] = useState<RestaurantProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [err, setErr] = useState("");
 
   useEffect(() => {
     const fetchRestaurants = async () => {

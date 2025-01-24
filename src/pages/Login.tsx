@@ -4,7 +4,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import Logo from "../components/Logo";
-import { notificationService } from "../services/notificationService";
+
 
 export default function Login() {
   const location = useLocation();
@@ -56,20 +56,17 @@ export default function Login() {
       await userCredential.user.reload();
       const updatedUser = auth.currentUser;
       
-      if (!updatedUser?.emailVerified) {
-        navigate(
-          userData.userType === "restaurant"
-            ? "/restaurant-verify-email"
-            : "/verify-email"
-        );
-        return;
-      }
-
-      // Handle restaurant-specific checks
+      // Check user type first
       if (userData.userType === "restaurant") {
         const restaurantDoc = await getDoc(doc(db, "restaurants", userCredential.user.uid));
         if (!restaurantDoc.exists()) {
           throw new Error("Restaurant profile not found");
+        }
+
+        // Check email verification for restaurant
+        if (!updatedUser?.emailVerified) {
+          navigate("/restaurant-verify-email");
+          return;
         }
 
         if (!userData.isApproved) {
@@ -87,13 +84,26 @@ export default function Login() {
           throw new Error("Rider profile not found");
         }
 
+        // Check email verification for rider
+        if (!updatedUser?.emailVerified) {
+          navigate("/rider-verify-email");
+          return;
+        }
+
         if (!riderDoc.data().isVerified) {
           await auth.signOut();
-          throw new Error("Your rider account is pending verification. We'll notify you via email once verified.");
+          throw new Error(
+            "Your rider account is pending verification. We'll review your documents and notify you via email once verified. This usually takes 1-2 business days."
+          );
         }
         
-        navigate("/rider/dashboard");
+        navigate("/rider-dashboard");
       } else {
+        // Regular user
+        if (!updatedUser?.emailVerified) {
+          navigate("/verify-email");
+          return;
+        }
         navigate("/home");
       }
     } catch (err) {
@@ -102,17 +112,19 @@ export default function Login() {
       if (err instanceof Error) {
         if (err.message.includes('auth/invalid-credential')) {
           setError('Invalid email or password');
+          await auth.signOut();
         } else if (err.message.includes('auth/too-many-requests')) {
           setError('Too many failed attempts. Please try again later');
+          await auth.signOut();
+        } else if (err.message.includes('auth/')) {
+          setError(err.message);
+          await auth.signOut();
         } else {
+          // For non-auth errors (like Firestore errors), don't sign out
           setError(err.message);
         }
       } else {
         setError('An unexpected error occurred');
-      }
-
-      if (auth.currentUser) {
-        await auth.signOut();
       }
     } finally {
       setLoading(false);

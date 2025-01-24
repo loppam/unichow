@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { adminVerificationService } from '../../services/adminVerificationService';
-import { CheckCircle, XCircle, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import { VerificationDocument } from '../../types/verification';
@@ -21,7 +20,7 @@ interface Verification {
 export default function VerificationReview() {
   const [verifications, setVerifications] = useState<Verification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedRestaurant, setSelectedRestaurant] = useState<any | null>(null);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<Verification | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [reviewing, setReviewing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'approved' | 'pending' | 'rejected'>('all');
@@ -106,7 +105,7 @@ export default function VerificationReview() {
 
   const FilterButton = ({ value }: { value: string }) => (
     <button
-      onClick={() => setFilter(value as any)}
+      onClick={() => setFilter(value as 'all' | 'approved' | 'pending' | 'rejected')}
       className={`px-4 py-2 rounded-lg capitalize transition-colors ${
         filter === value
           ? 'bg-black text-white'
@@ -117,7 +116,7 @@ export default function VerificationReview() {
     </button>
   );
 
-  const StatusBadge = ({ status }: { status: any }) => {
+  const StatusBadge = ({ status }: { status: Verification['status'] }) => {
     if (!status) return null;
 
     const getStatus = () => {

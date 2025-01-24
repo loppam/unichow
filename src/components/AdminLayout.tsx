@@ -10,6 +10,7 @@ import {
   Menu,
   X,
   LogOut,
+  Bike,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -24,7 +25,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const navigation = [
     { path: "/admin", icon: Home, label: "Dashboard" },
-    { path: "/admin/verification", icon: Users, label: "Verification" },
+    { path: "/admin/verification", icon: Users, label: "Restaurant Verification" },
+    { path: "/admin/rider-verification", icon: Bike, label: "Rider Verification" },
     { path: "/admin/orders", icon: ShoppingCartIcon, label: "Orders" },
     ...(isSuperAdmin
       ? [{ path: "/admin/users", icon: Users, label: "Users" }]

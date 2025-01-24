@@ -1,17 +1,20 @@
-import { db } from '../firebase/config';
-import { doc, updateDoc } from 'firebase/firestore';
-import axios from 'axios';
-import { securePaymentService } from './securePaymentService';
-import { createPaystackHmac } from '../utils/crypto';
-import { RestaurantPaymentInfo } from '../types/restaurant';
+import { db } from "../firebase/config";
+import { doc, updateDoc } from "firebase/firestore";
+import axios from "axios";
+import { securePaymentService } from "./securePaymentService";
+import { createPaystackHmac } from "../utils/crypto";
+import { RestaurantPaymentInfo } from "../types/restaurant";
 
 const PAYSTACK_SECRET_KEY = import.meta.env.VITE_PAYSTACK_SECRET_KEY;
-const PAYSTACK_API = 'https://api.paystack.co';
+const PAYSTACK_API = "https://api.paystack.co";
 
-interface WebhookRequest extends Request {
-  body: any;
-  headers: Headers & {
-    'x-paystack-signature': string;
+interface WebhookRequest {
+  body: {
+    event: string;
+    data: TransferData;
+  };
+  headers: {
+    "x-paystack-signature": string;
   };
 }
 
@@ -32,7 +35,10 @@ interface TransferData {
 }
 
 export const paystackService = {
-  async createSubaccount(restaurantId: string, paymentInfo: RestaurantPaymentInfo) {
+  async createSubaccount(
+    restaurantId: string,
+    paymentInfo: RestaurantPaymentInfo
+  ) {
     try {
       // Validate payment info first
       securePaymentService.validatePaymentInfo(paymentInfo);
@@ -45,13 +51,13 @@ export const paystackService = {
           settlement_bank: paymentInfo.bankName,
           account_number: paymentInfo.accountNumber,
           percentage_charge: 90,
-          description: `Restaurant ${restaurantId} subaccount`
+          description: `Restaurant ${restaurantId} subaccount`,
         },
         {
           headers: {
-            'Authorization': `Bearer ${PAYSTACK_SECRET_KEY}`,
-            'Content-Type': 'application/json'
-          }
+            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+            "Content-Type": "application/json",
+          },
         }
       );
 
@@ -60,12 +66,12 @@ export const paystackService = {
         ...paymentInfo,
         paystackSubaccountCode: response.data.data.subaccount_code,
         isVerified: true,
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       });
 
       return response.data.data;
     } catch (error) {
-      console.error('Error creating subaccount:', error);
+      console.error("Error creating subaccount:", error);
       throw error;
     }
   },
@@ -76,29 +82,26 @@ export const paystackService = {
         `${PAYSTACK_API}/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`,
         {
           headers: {
-            'Authorization': `Bearer ${PAYSTACK_SECRET_KEY}`
-          }
+            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+          },
         }
       );
       return response.data.data;
     } catch (error) {
-      throw new Error('Unable to verify bank account');
+      throw new Error("Unable to verify bank account");
     }
   },
 
   async getBankList() {
     try {
-      const response = await axios.get(
-        `${PAYSTACK_API}/bank`,
-        {
-          headers: {
-            'Authorization': `Bearer ${PAYSTACK_SECRET_KEY}`
-          }
-        }
-      );
+      const response = await axios.get(`${PAYSTACK_API}/bank`, {
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+        },
+      });
       return response.data.data;
     } catch (error) {
-      throw new Error('Unable to fetch bank list');
+      throw new Error("Unable to fetch bank list");
     }
   },
 
@@ -106,47 +109,95 @@ export const paystackService = {
   async handleWebhook(req: WebhookRequest) {
     try {
       const hash = createPaystackHmac(req.body);
-      const signature = req.headers['x-paystack-signature'];
+      const signature = req.headers["x-paystack-signature"];
 
       if (hash !== signature) {
-        throw new Error('Invalid signature');
+        throw new Error("Invalid signature");
       }
 
       const event = req.body;
 
       switch (event.event) {
-        case 'transfer.success':
+        case "transfer.success":
           await this.handleTransferSuccess(event.data as TransferData);
           break;
-        case 'transfer.failed':
+        case "transfer.failed":
           await this.handleTransferFailed(event.data as TransferData);
           break;
         default:
           console.log(`Unhandled event type: ${event.event}`);
       }
 
-      return { status: 'success' };
+      return { status: "success" };
     } catch (error) {
-      console.error('Webhook error:', error);
+      console.error("Webhook error:", error);
       throw error;
     }
   },
 
   async handleTransferSuccess(data: TransferData) {
     // Update transfer status in database
-    const transferRef = doc(db, 'transfers', data.reference);
+    const transferRef = doc(db, "transfers", data.reference);
     await updateDoc(transferRef, {
-      status: 'success',
-      updatedAt: new Date().toISOString()
+      status: "success",
+      updatedAt: new Date().toISOString(),
     });
   },
 
   async handleTransferFailed(data: TransferData) {
     // Update transfer status in database
-    const transferRef = doc(db, 'transfers', data.reference);
+    const transferRef = doc(db, "transfers", data.reference);
     await updateDoc(transferRef, {
-      status: 'failed',
-      updatedAt: new Date().toISOString()
+      status: "failed",
+      updatedAt: new Date().toISOString(),
     });
-  }
-}; 
+  },
+
+  async initializeTransaction(data: {
+    email: string;
+    amount: number;
+    metadata: {
+      type: string;
+      userId: string;
+    };
+  }): Promise<{ reference: string }> {
+    try {
+      const response = await axios.post(
+        `${PAYSTACK_API}/transaction/initialize`,
+        {
+          email: data.email,
+          amount: data.amount,
+          metadata: data.metadata,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      return { reference: response.data.data.reference };
+    } catch (error) {
+      console.error("Error initializing transaction:", error);
+      throw error;
+    }
+  },
+
+  async getSubaccountBalance(subaccountCode: string): Promise<number> {
+    try {
+      const response = await axios.get(
+        `${PAYSTACK_API}/balance/${subaccountCode}`,
+        {
+          headers: {
+            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      return response.data.data.balance / 100; // Convert from kobo to naira
+    } catch (error) {
+      console.error("Error fetching subaccount balance:", error);
+      throw error;
+    }
+  },
+};

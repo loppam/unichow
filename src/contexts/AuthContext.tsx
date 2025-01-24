@@ -7,7 +7,34 @@ import { db } from '../firebase/config';
 interface User {
   uid: string;
   email: string | null;
-  // ... other user properties
+  emailVerified: boolean;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  address?: string;
+  userType?: 'user' | 'restaurant' | 'rider';
+  createdAt?: string;
+  lastUpdated?: string;
+  lastLogin?: string;
+  isVerified?: boolean;
+  role?: string;
+  status?: string;
+  // Restaurant specific
+  restaurantName?: string;
+  description?: string;
+  cuisineTypes?: string[];
+  openingHours?: string;
+  closingHours?: string;
+  isApproved?: boolean;
+  // Rider specific
+  vehicleType?: string;
+  vehiclePlate?: string;
+  licenseNumber?: string;
+  workingHours?: string;
+  emergencyContact?: string;
+  emergencyPhone?: string;
+  rating?: number;
+  totalDeliveries?: number;
 }
 
 type CustomUser = User & {
@@ -36,7 +63,7 @@ export function useAuth(): { user: CustomUser | null; loading: boolean; signIn: 
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [user, setUser] = useState<User | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [isVerified, setIsVerified] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -79,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {

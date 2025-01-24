@@ -47,7 +47,7 @@ export default function AdminSettings() {
     };
 
     fetchUserData();
-  }, [user?.uid]);
+  }, [user?.uid, user?.email]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -114,11 +114,11 @@ export default function AdminSettings() {
       }));
 
       toast.success('Password updated successfully');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating password:', error);
-      if (error.code === 'auth/wrong-password') {
+      if ((error as { code?: string }).code === 'auth/wrong-password') {
         toast.error('Current password is incorrect');
-      } else if (error.code === 'auth/requires-recent-login') {
+      } else if ((error as { code?: string }).code === 'auth/requires-recent-login') {
         toast.error('Please log out and log back in before changing your password');
       } else {
         toast.error('Failed to update password');
@@ -213,8 +213,8 @@ export default function AdminSettings() {
                     await testNotification(user.uid);
                     toast.dismiss(loading);
                     toast.success('Test notification sent successfully!');
-                  } catch (error: any) {
-                    toast.error(error?.message || 'Failed to send test notification');
+                  } catch (error: unknown) {
+                    toast.error((error as Error)?.message || 'Failed to send test notification');
                     console.error('Notification error:', error);
                   }
                 }}

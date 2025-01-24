@@ -31,3 +31,8 @@ dev-dist
 .env.test.local
 .env.production.local
 .vercel
+
+# Service account keys
+**/serviceAccountKey.json
+**/service-account.json
+**/*.service-account.json

@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Timestamp, FieldValue } from 'firebase/firestore';
+import { Timestamp, FieldValue } from "firebase/firestore";
 
 export interface Address {
   id?: string;
@@ -15,10 +15,19 @@ export interface OrderItem {
   specialInstructions?: string;
 }
 
-export type OrderStatus = 'cart' | 'pending' | 'accepted' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+export type OrderStatus =
+  | "cart"
+  | "pending"
+  | "accepted"
+  | "preparing"
+  | "ready"
+  | "delivered"
+  | "cancelled"
+  | "assigned"
+  | "picked_up";
 
-export type PaymentMethod = 'card' | 'cash';
-export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+export type PaymentMethod = "card" | "cash";
+export type PaymentStatus = "pending" | "completed" | "failed" | "refunded";
 export type NotificationStatus = "pending" | "cancelled" | "completed";
 
 export interface OrderPack {
@@ -34,6 +43,7 @@ export interface Order {
   customerId: string;
   restaurantId: string;
   customerName: string;
+  customerPhone: string;
   customerAddress: string;
   items: OrderItem[];
   total: number;
@@ -43,7 +53,7 @@ export interface Order {
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
-  createdAt: string;
+  createdAt: Timestamp | string;
   updatedAt: string;
   acceptedAt?: string;
   preparedAt?: string;
@@ -56,6 +66,9 @@ export interface Order {
     additionalInstructions?: string;
   };
   packs?: OrderPack[];
+  riderId?: string;
+  restaurantName: string;
+  deliveryConfirmationCode: string;
 }
 
 export interface OrderNotification {
@@ -63,12 +76,18 @@ export interface OrderNotification {
   orderId: string;
   customerName: string;
   amount: number;
-  status: 'pending' | 'completed' | 'cancelled';
+  status: "pending" | "completed" | "cancelled";
   message: string;
   timestamp: string;
   read: boolean;
   readAt?: string;
-  type: 'order';
+  type: "delivery" | "order" | "pre_assignment";
+  restaurantId?: string;
+  deliveryAddress?: string;
+  data?: {
+    estimatedPickupTime?: string;
+    expiresAt?: string;
+  };
 }
 
 export interface UserOrder extends Order {

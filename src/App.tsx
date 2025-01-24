@@ -33,6 +33,12 @@ import PublicRestaurantMenu from './pages/PublicRestaurantMenu';
 import { CartProvider } from './contexts/CartContext';
 import UserOrders from './pages/UserOrders';
 import RestaurantOrderView from './pages/RestaurantOrderView';
+import RiderDashboard from "./pages/RiderDashboard";
+import RiderOrders from "./pages/RiderOrders";
+import RiderSettings from "./pages/RiderSettings";
+import RiderEmailVerification from "./pages/RiderEmailVerification";
+import RiderPending from "./pages/RiderPending";
+import RiderVerificationReview from './pages/admin/RiderVerificationReview';
 
 function App() {
   return (
@@ -49,6 +55,8 @@ function App() {
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/explore" element={<Explore />} />
+                  <Route path="/restaurant/:id" element={<PublicRestaurantMenu />} />
 
                   {/* Email verification routes */}
                   <Route
@@ -62,16 +70,21 @@ function App() {
                   <Route
                     path="/restaurant-verify-email"
                     element={
-                      <ProtectedRoute
-                        userType="restaurant"
-                        requireVerification={false}
-                      >
+                      <ProtectedRoute userType="restaurant" requireVerification={false}>
                         <RestaurantEmailVerification />
                       </ProtectedRoute>
                     }
                   />
+                  <Route
+                    path="/rider-verify-email"
+                    element={
+                      <ProtectedRoute userType="rider" requireVerification={false}>
+                        <RiderEmailVerification />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                  {/* Customer routes */}
+                  {/* User routes */}
                   <Route
                     path="/home"
                     element={
@@ -80,7 +93,6 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
-                  <Route path="/explore" element={<Explore />} />
                   <Route
                     path="/cart"
                     element={
@@ -97,6 +109,7 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
+                  <Route path="/orders" element={<UserOrders />} />
 
                   {/* Restaurant routes */}
                   <Route
@@ -134,63 +147,121 @@ function App() {
                   <Route
                     path="/restaurant-pending"
                     element={
-                      <ProtectedRoute
-                        userType="restaurant"
-                        requireVerification={true}
-                      >
+                      <ProtectedRoute userType="restaurant" requireVerification={true}>
                         <RestaurantPending />
                       </ProtectedRoute>
                     }
                   />
-                  <Route 
-                    path="/restaurant/orders/:orderId" 
-                    element={<ProtectedRoute userType="restaurant"><RestaurantOrderView /></ProtectedRoute>} 
+                  <Route
+                    path="/restaurant/orders/:orderId"
+                    element={
+                      <ProtectedRoute userType="restaurant">
+                        <RestaurantOrderView />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Rider routes */}
+                  <Route
+                    path="/rider-dashboard"
+                    element={
+                      <ProtectedRoute userType="rider">
+                        <RiderDashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/rider-orders"
+                    element={
+                      <ProtectedRoute userType="rider">
+                        <RiderOrders />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/rider-settings"
+                    element={
+                      <ProtectedRoute userType="rider">
+                        <RiderSettings />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/rider-pending"
+                    element={
+                      <ProtectedRoute userType="rider" requireVerification={true}>
+                        <RiderPending />
+                      </ProtectedRoute>
+                    }
                   />
 
                   {/* Admin routes */}
                   <Route path="/admin" element={<AdminLayout><Outlet /></AdminLayout>}>
-                    <Route index element={
-                      <AdminRoute>
-                        <AdminDashboard />
-                      </AdminRoute>
-                    } />
-                    <Route path="orders" element={
-                      <AdminRoute>
-                        <AdminOrders />
-                      </AdminRoute>
-                    } />
-                    <Route path="users" element={
-                      <AdminRoute requireSuperAdmin={true}>
-                        <UserManagement />
-                      </AdminRoute>
-                    } />
-                    <Route path="settings" element={
-                      <AdminRoute>
-                        <AdminSettings />
-                      </AdminRoute>
-                    } />
-                    <Route path="analytics" element={
-                      <AdminRoute>
-                        <AdminAnalytics />
-                      </AdminRoute>
-                    } />
-                    <Route path="users/create" element={
-                      <AdminRoute requireSuperAdmin={true}>
-                        <CreateAdmin />
-                      </AdminRoute>
-                    } />
-                    <Route path="verification" element={
-                      <AdminRoute>
-                        <VerificationReview />
-                      </AdminRoute>
-                    } />
+                    <Route
+                      index
+                      element={
+                        <AdminRoute>
+                          <AdminDashboard />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="orders"
+                      element={
+                        <AdminRoute>
+                          <AdminOrders />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="users"
+                      element={
+                        <AdminRoute requireSuperAdmin={true}>
+                          <UserManagement />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="settings"
+                      element={
+                        <AdminRoute>
+                          <AdminSettings />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="analytics"
+                      element={
+                        <AdminRoute>
+                          <AdminAnalytics />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="users/create"
+                      element={
+                        <AdminRoute requireSuperAdmin={true}>
+                          <CreateAdmin />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="verification"
+                      element={
+                        <AdminRoute>
+                          <VerificationReview />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="rider-verification"
+                      element={
+                        <AdminRoute>
+                          <RiderVerificationReview />
+                        </AdminRoute>
+                      }
+                    />
                   </Route>
-
-                  {/* Public restaurant menu route */}
-                  <Route path="/restaurant/:id" element={<PublicRestaurantMenu />} />
-
-                  {/* User orders route */}
-                  <Route path="/orders" element={<UserOrders />} />
                 </Routes>
               </CartProvider>
             </NotificationProvider>

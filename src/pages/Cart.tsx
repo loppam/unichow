@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import BottomNav from "../components/BottomNav";
@@ -6,14 +6,29 @@ import { CartItem, useCart } from "../contexts/CartContext";
 import { toast } from "react-hot-toast";
 import { orderService } from "../services/orderService";
 import { useAuth } from "../contexts/AuthContext";
-import { Address } from "../types/order";
+import { Address, Order } from "../types/order";
 import { customerService } from "../services/customerService";
-import { getDoc, doc } from "firebase/firestore";
+import {
+  getDoc,
+  doc,
+  collection,
+  query,
+  where,
+  getDocs,
+  limit,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "../firebase/config";
 import { adminSettingsService } from "../services/adminSettingsService";
 import { usePaystackPayment } from "react-paystack";
 import PaymentBreakdown from "../components/PaymentBreakdown";
-import { notificationService } from "../services/notificationService";
+import { riderAssignmentService } from "../services/riderAssignmentService";
+import { walletService } from "../services/walletService";
+import WalletPaymentOption from "../components/WalletPaymentOption";
+import { Wallet } from "../types/wallet";
+import { Rider } from "../types/rider";
+import { PaystackProps } from "react-paystack/dist/types";
 
 interface DeliveryFormData {
   address: string;
@@ -35,8 +50,26 @@ interface PaystackResponse {
   trxref: string;
 }
 
+interface RestaurantData {
+  id: string;
+  restaurantName: string;
+  paymentInfo: {
+    paystackSubaccountCode: string;
+    isVerified: boolean;
+  };
+  status: "pending" | "approved" | "rejected" | "suspended";
+}
+
+interface UserData {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
-const RIDER_ACCOUNT_CODE = import.meta.env.VITE_RIDER_ACCOUNT_CODE;
 
 export default function Cart() {
   const {
@@ -49,7 +82,7 @@ export default function Cart() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const [userData, setUserData] = useState<any>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryFormData>({
     address: "",
@@ -76,7 +109,16 @@ export default function Cart() {
       subaccounts: [],
     },
   });
-  const [restaurantData, setRestaurantData] = useState<any>(null);
+  const [restaurantData, setRestaurantData] = useState<RestaurantData | null>(
+    null
+  );
+  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"paystack" | "wallet">(
+    "paystack"
+  );
+  const [processing, setProcessing] = useState(false);
+  const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
 
   const calculatePackTotal = (items: CartItem[]) => {
     return items.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -174,11 +216,17 @@ export default function Cart() {
     navigate(`/restaurant/${restaurantId}?newPack=true`);
   };
 
-  const handlePaystackSuccess = async (reference: PaystackResponse) => {
+  const generateDeliveryCode = () => {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+  };
+
+  const handlePaystackSuccess = async (reference: { reference: string }) => {
     try {
-      // Create order with pack structure
+      if (!user) return;
+
+      const paymentRef = reference as unknown as PaystackResponse;
       const newOrder = {
-        customerId: user!.uid,
+        customerId: user.uid,
         restaurantId: packs[0].restaurantId,
         packs: packs.map((pack) => ({
           id: pack.id,
@@ -204,30 +252,57 @@ export default function Cart() {
         subtotal: calculateSubtotal(),
         deliveryFee: calculateDeliveryFee(),
         serviceFee: calculateServiceFee(),
-        status: "pending" as const,
-        paymentMethod: "card" as const,
-        paymentStatus: "completed" as const,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        paymentReference: reference,
+        deliveryConfirmationCode: generateDeliveryCode(),
+        paymentMethod: "paystack",
+        paymentStatus: "completed",
+        paymentReference: paymentRef.reference,
       };
 
-      // Create the order in the database
-      const orderId = await orderService.createOrder(user!.uid, newOrder);
-
-      // Clear cart and redirect
+      const orderId = await orderService.createOrder(user.uid, newOrder);
       clearCart();
-      navigate(`/orders`);
+
+      // Show confirmation modal with delivery code
+      const confirmedOrderData = {
+        ...newOrder,
+        id: orderId,
+        customerAddress: deliveryAddress.address,
+        items: packs.flatMap((pack) => pack.items),
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        restaurantName: packs[0].restaurantName,
+        packs: packs.map((pack) => ({
+          ...pack,
+          restaurantId: pack.restaurantId,
+          restaurantAddress: "",
+        })),
+      } as unknown as Order;
+
+      setConfirmedOrder(confirmedOrderData);
+      setShowConfirmationModal(true);
+
+      // Wait 10 seconds then navigate to orders page
+      setTimeout(() => {
+        setShowConfirmationModal(false);
+        navigate("/orders", {
+          state: {
+            showConfirmation: true,
+            order: confirmedOrderData,
+          },
+        });
+      }, 10000);
+
+      toast.success("Order placed successfully!");
     } catch (error) {
-      console.error("Error creating order:", error);
-      toast.error("Failed to create order");
+      console.error("Error processing payment:", error);
+      toast.error("Failed to process payment");
     }
   };
 
   const handlePaystackClose = () => {
     console.log("Payment modal closed");
     toast.error("Payment cancelled. Please try again.");
-    setPaymentStep("cart"); // Reset to cart step
+    setPaymentStep("cart");
   };
 
   const validateAddress = () => {
@@ -236,6 +311,32 @@ export default function Cart() {
       return false;
     }
     return true;
+  };
+
+  const checkRiderAvailability = async () => {
+    const ridersRef = collection(db, "riders");
+    const q = query(
+      ridersRef,
+      where("status", "in", ["approved", "available"]),
+      where("isVerified", "==", true)
+    );
+
+    const ridersSnapshot = await getDocs(q);
+    const availableRiders = ridersSnapshot.docs
+      .map((doc) => ({
+        ...(doc.data() as Rider),
+      }))
+      .sort(
+        (a, b) =>
+          (a.assignedOrders?.length || 0) - (b.assignedOrders?.length || 0)
+      );
+
+    if (availableRiders.length === 0) {
+      console.log("rider didnt dey or did it?", availableRiders);
+      throw new Error(
+        "No riders available at the moment. Please try again later."
+      );
+    }
   };
 
   const handlePayment = async () => {
@@ -250,20 +351,75 @@ export default function Cart() {
     }
 
     try {
-      // Fetch restaurant data if not already loaded
+      setIsInitializing(true);
+
+      // Fetch restaurant data first
       if (!restaurantData) {
         const restaurantDoc = await getDoc(
           doc(db, "restaurants", packs[0].restaurantId)
         );
-        if (restaurantDoc.exists()) {
-          setRestaurantData(restaurantDoc.data());
+        if (!restaurantDoc.exists()) throw new Error("Restaurant not found");
+        const data = restaurantDoc.data() as RestaurantData;
+        if (!data.paymentInfo?.paystackSubaccountCode) {
+          throw new Error("Restaurant payment information is missing");
         }
+        setRestaurantData(data);
       }
 
-      setPaymentStep("payment");
+      await checkRiderAvailability();
+
+      // Create order with status "ready"
+      const newOrder = {
+        customerId: user.uid,
+        restaurantId: packs[0].restaurantId,
+        packs: packs.map((pack) => ({
+          id: pack.id,
+          restaurantName: pack.restaurantName,
+          items: pack.items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            specialInstructions: item.specialInstructions || "",
+          })),
+        })),
+        customerName:
+          userData?.firstName || userData?.lastName
+            ? `${userData?.firstName || ""} ${userData?.lastName || ""}`
+            : "Anonymous",
+        customerPhone: userData?.phone || "",
+        deliveryAddress: {
+          address: deliveryAddress.address,
+          additionalInstructions: deliveryAddress.additionalInstructions || "",
+        },
+        total: calculateTotal(),
+        subtotal: calculateSubtotal(),
+        deliveryFee: calculateDeliveryFee(),
+        serviceFee: calculateServiceFee(),
+        deliveryConfirmationCode: generateDeliveryCode(),
+        status: "ready",
+        paymentMethod: "paystack",
+        paymentStatus: "pending",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const orderId = await orderService.createOrder(user.uid, newOrder);
+
+      // Initialize Paystack payment
+      const config = getPaystackConfig(restaurantData!);
+      initializePayment({
+        ...config,
+        onSuccess: handlePaystackSuccess,
+        onClose: handlePaystackClose,
+      });
     } catch (error) {
       console.error("Error preparing payment:", error);
-      toast.error("Failed to initialize payment");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to initialize payment"
+      );
+    } finally {
+      setIsInitializing(false);
     }
   };
 
@@ -276,6 +432,35 @@ export default function Cart() {
       )}
 
       <div className="space-y-4">
+        {savedAddresses.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Saved Addresses
+            </label>
+            <select
+              value={deliveryAddress.address}
+              onChange={(e) => {
+                const selected = savedAddresses.find(
+                  (addr) => addr.address === e.target.value
+                );
+                if (selected) {
+                  setDeliveryAddress(selected);
+                }
+              }}
+              className="w-full p-2 border rounded-md"
+            >
+              <option value="">
+                Select a saved address or enter new below
+              </option>
+              {savedAddresses.map((addr, index) => (
+                <option key={index} value={addr.address}>
+                  {addr.address}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Delivery Address *
@@ -290,7 +475,7 @@ export default function Cart() {
               }))
             }
             className="w-full p-2 border rounded-md"
-            placeholder="Enter your full delivery address"
+            placeholder="Enter your delivery address"
             required
           />
         </div>
@@ -354,18 +539,21 @@ export default function Cart() {
     fetchDeliverySettings();
   }, [location.pathname]);
 
-  const getPaystackConfig = (restaurantData: any) => {
+  const getPaystackConfig = (restaurantData: RestaurantData) => {
     if (!user || !restaurantData) {
       throw new Error("Missing required payment information");
     }
 
     const total = calculateTotal();
-    const amount = Math.round(total * 100); // Convert to kobo/cents
+    const subtotal = calculateSubtotal();
+    const deliveryFee = calculateDeliveryFee();
+    const serviceFee = calculateServiceFee(); // 10% of subtotal
+    const amount = Math.round(total * 100);
 
-    // Validate amount
-    if (amount < 100) {
-      throw new Error("Order amount is too small");
-    }
+    // Calculate percentages for split
+    const platformShare = Math.floor((serviceFee / total) * 100); // Platform gets service fee
+    const deliveryShare = Math.floor((deliveryFee / total) * 100); // Rider gets delivery fee
+    const restaurantShare = 100 - platformShare - deliveryShare; // Restaurant gets the rest
 
     const baseConfig = {
       key: PAYSTACK_PUBLIC_KEY,
@@ -384,34 +572,22 @@ export default function Cart() {
           },
         ],
       },
-      onSuccess: handlePaystackSuccess,
-      onClose: handlePaystackClose,
     };
 
-    // Only add split if restaurant has valid payment info
-    if (restaurantData?.paymentInfo?.paystackSubaccountCode) {
-      const deliveryFeePercentage = Math.max(
-        1,
-        Math.floor((calculateDeliveryFee() / total) * 100)
-      );
-      const restaurantShare = 90 - deliveryFeePercentage;
-
-      return {
-        ...baseConfig,
-        split: {
-          type: "percentage",
-          bearer_type: "account",
-          subaccounts: [
-            {
-              subaccount: restaurantData.paymentInfo.paystackSubaccountCode,
-              share: restaurantShare,
-            },
-          ],
-        },
-      };
-    }
-
-    return baseConfig;
+    return {
+      ...baseConfig,
+      amount,
+      split: {
+        type: "percentage",
+        bearer_type: "account", // Platform bears transaction fees
+        subaccounts: [
+          {
+            subaccount: restaurantData.paymentInfo.paystackSubaccountCode,
+            share: restaurantShare,
+          },
+        ],
+      },
+    };
   };
 
   useEffect(() => {
@@ -430,7 +606,7 @@ export default function Cart() {
       try {
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
-          setUserData(userDoc.data());
+          setUserData(userDoc.data() as UserData);
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
@@ -439,6 +615,118 @@ export default function Cart() {
 
     fetchUserData();
   }, [user]);
+
+  const loadWallet = useCallback(async () => {
+    try {
+      const walletData = await walletService.getWallet(user!.uid);
+      setWallet(walletData);
+    } catch (error) {
+      console.error("Error loading wallet:", error);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user?.uid) {
+      loadWallet();
+    }
+  }, [user, loadWallet]);
+
+  const handleWalletPayment = async () => {
+    if (!user || !wallet) return;
+
+    try {
+      setProcessing(true);
+      const total = calculateTotal();
+
+      // Check wallet balance
+      if (wallet.balance < total) {
+        toast.error("Insufficient wallet balance");
+        return;
+      }
+
+      // Create order first
+      const newOrder = {
+        customerId: user.uid,
+        restaurantId: packs[0].restaurantId,
+        packs: packs.map((pack) => ({
+          id: pack.id,
+          restaurantName: pack.restaurantName,
+          items: pack.items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            specialInstructions: item.specialInstructions || "",
+          })),
+        })),
+        customerName:
+          userData?.firstName || userData?.lastName
+            ? `${userData?.firstName || ""} ${userData?.lastName || ""}`
+            : "Anonymous",
+        customerPhone: userData?.phone || "",
+        deliveryAddress: {
+          address: deliveryAddress.address,
+          additionalInstructions: deliveryAddress.additionalInstructions || "",
+        },
+        total,
+        subtotal: calculateSubtotal(),
+        deliveryFee: calculateDeliveryFee(),
+        serviceFee: calculateServiceFee(),
+        deliveryConfirmationCode: generateDeliveryCode(),
+        paymentMethod: "wallet",
+        paymentStatus: "completed",
+      };
+
+      const orderId = await orderService.createOrder(user.uid, newOrder);
+
+      // Deduct from wallet after order creation
+      const newBalance = wallet.balance - total;
+      await updateDoc(doc(db, "wallets", user.uid), {
+        balance: newBalance,
+        updatedAt: serverTimestamp(),
+      });
+
+      clearCart();
+
+      // Show confirmation modal with delivery code
+      const confirmedOrderData = {
+        ...newOrder,
+        id: orderId,
+        customerAddress: deliveryAddress.address,
+        items: packs.flatMap((pack) => pack.items),
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        restaurantName: packs[0].restaurantName,
+        packs: packs.map((pack) => ({
+          ...pack,
+          restaurantId: pack.restaurantId,
+          restaurantAddress: "",
+        })),
+      } as unknown as Order;
+
+      setConfirmedOrder(confirmedOrderData);
+      setShowConfirmationModal(true);
+
+      // Wait 10 seconds then navigate to orders page
+      setTimeout(() => {
+        setShowConfirmationModal(false);
+        navigate("/orders", {
+          state: {
+            showConfirmation: true,
+            order: confirmedOrderData,
+          },
+        });
+      }, 10000);
+
+      toast.success("Order placed successfully!");
+    } catch (error) {
+      console.error("Error processing wallet payment:", error);
+      toast.error("Failed to process payment");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   if (isInitializing) {
     return (
@@ -545,24 +833,117 @@ export default function Cart() {
               </div>
             </div>
 
-            <button
-              onClick={handlePayment}
-              disabled={packs.length === 0 || isInitializing}
-              className="w-full py-3 rounded-lg border border-black transition-colors bg-primary text-zinc-900 hover:bg-primary/90 disabled:opacity-50"
-            >
-              {isInitializing ? "Processing..." : "Proceed to Payment"}
-            </button>
+            <div className="payment-methods space-y-4">
+              <div className="flex flex-col gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="paystack"
+                    checked={paymentMethod === "paystack"}
+                    onChange={(e) => setPaymentMethod("paystack")}
+                    className="form-radio"
+                  />
+                  <span>Pay with Card</span>
+                </label>
+
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="wallet"
+                    checked={paymentMethod === "wallet"}
+                    onChange={(e) => setPaymentMethod("wallet")}
+                    disabled={!wallet || wallet.balance < calculateTotal()}
+                    className="form-radio"
+                  />
+                  <span>
+                    Pay with Wallet (Balance: ₦
+                    {wallet?.balance.toLocaleString() || 0})
+                  </span>
+                </label>
+                {wallet && wallet.balance < calculateTotal() && (
+                  <div className="text-sm text-red-600">
+                    Insufficient wallet balance. Please fund your wallet or
+                    choose another payment method.
+                  </div>
+                )}
+              </div>
+
+              {paymentMethod === "wallet" ? (
+                <button
+                  onClick={handleWalletPayment}
+                  disabled={
+                    processing || !wallet || wallet.balance < calculateTotal()
+                  }
+                  className="w-full py-3 rounded-lg border border-black transition-colors bg-primary text-zinc-900 hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {processing ? "Processing..." : "Pay with Wallet"}
+                </button>
+              ) : (
+                <button
+                  onClick={handlePayment}
+                  disabled={packs.length === 0 || isInitializing}
+                  className="w-full py-3 rounded-lg border border-black transition-colors bg-primary text-zinc-900 hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {isInitializing ? "Processing..." : "Proceed to Payment"}
+                </button>
+              )}
+            </div>
           </>
         ) : restaurantData ? (
-          <PaymentBreakdown
-            subtotal={calculateSubtotal()}
-            deliveryFee={calculateDeliveryFee()}
-            serviceFee={calculateServiceFee()}
-            total={calculateTotal()}
-            paystackConfig={getPaystackConfig(restaurantData)}
-            onBack={() => setPaymentStep("cart")}
-            restaurantId={packs[0].restaurantId}
-          />
+          <div className="space-y-4">
+            <div className="bg-white rounded-lg shadow-sm p-4">
+              <h2 className="font-semibold mb-4">Payment Method</h2>
+              <div className="space-y-2">
+                <button
+                  className={`w-full p-4 rounded-lg border ${
+                    paymentMethod === "paystack"
+                      ? "border-gray-800 bg-gray-50"
+                      : "border-gray-200"
+                  } flex items-center`}
+                  onClick={() => setPaymentMethod("paystack")}
+                >
+                  <div className="w-6 h-6 rounded-full border-2 border-gray-800 mr-3 flex items-center justify-center">
+                    {paymentMethod === "paystack" && (
+                      <div className="w-3 h-3 rounded-full bg-gray-800" />
+                    )}
+                  </div>
+                  <span>Card Payment</span>
+                </button>
+
+                <WalletPaymentOption
+                  wallet={wallet}
+                  paymentMethod={paymentMethod}
+                  calculateTotal={calculateTotal}
+                  onSelect={setPaymentMethod}
+                  variant="button"
+                />
+              </div>
+            </div>
+
+            <PaymentBreakdown
+              subtotal={calculateSubtotal()}
+              deliveryFee={calculateDeliveryFee()}
+              serviceFee={calculateServiceFee()}
+              total={calculateTotal()}
+              restaurantId={packs[0].restaurantId}
+              paystackConfig={getPaystackConfig(restaurantData)}
+              onBack={() => setPaymentStep("cart")}
+            />
+
+            {paymentMethod === "wallet" && (
+              <button
+                onClick={handleWalletPayment}
+                disabled={
+                  processing || !wallet || wallet.balance < calculateTotal()
+                }
+                className="w-full py-3 px-4 bg-primary text-white rounded-lg disabled:opacity-50"
+              >
+                {processing ? "Processing..." : "Pay with Wallet"}
+              </button>
+            )}
+          </div>
         ) : (
           <div className="text-center py-4">
             <p>Loading payment details...</p>

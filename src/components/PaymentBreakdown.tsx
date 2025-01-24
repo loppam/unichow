@@ -11,12 +11,26 @@ interface PaymentBreakdownProps {
     key?: string;
     email?: string;
     amount?: number;
-    metadata?: any;
-    split?: any;
-    onSuccess?: (reference: any) => Promise<void>;
+    metadata?: PaystackMetadata;
+    split?: {
+      type: string;
+      bearer_type: string;
+      subaccounts: Array<Record<string, unknown>>;
+    };
+    onSuccess?: (reference: { reference: string }) => Promise<void>;
     onClose?: () => void;
   };
   onBack: () => void;
+}
+
+interface PaystackCustomFields {
+  display_name: string;
+  variable_name: string;
+  value: string;
+}
+
+interface PaystackMetadata {
+  custom_fields: PaystackCustomFields[];
 }
 
 export default function PaymentBreakdown({
@@ -31,7 +45,7 @@ export default function PaymentBreakdown({
     publicKey: paystackConfig.key || '',
     email: paystackConfig.email || '',
     amount: paystackConfig.amount || 0,
-    metadata: paystackConfig.metadata || { custom_fields: [] },
+    metadata: (paystackConfig.metadata as PaystackMetadata) || { custom_fields: [] as PaystackCustomFields[] },
     split: paystackConfig.split || {
       type: "percentage",
       bearer_type: "account",
@@ -41,7 +55,7 @@ export default function PaymentBreakdown({
 
   const handlePayment = () => {
     initializePayment({
-      onSuccess: (reference: any) => {
+      onSuccess: (reference: { reference: string }) => {
         if (paystackConfig.onSuccess) {
           paystackConfig.onSuccess(reference);
         }

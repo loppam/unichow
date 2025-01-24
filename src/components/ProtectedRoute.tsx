@@ -7,7 +7,7 @@ import { User } from 'firebase/auth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  userType: 'user' | 'restaurant' | 'admin';
+  userType: 'user' | 'restaurant' | 'admin' | 'rider';
   requireVerification?: boolean;
 }
 
@@ -89,6 +89,19 @@ export default function ProtectedRoute({
         if (userType === 'admin' && !userData.isAdmin) {
           navigate('/home', { replace: true });
           return;
+        }
+
+        // Update the check for rider verification and approval
+        if (userType === 'rider') {
+          // Don't redirect to verification page if we're already on it
+          if (!userData.emailVerified && !location.pathname.includes('verify-email')) {
+            navigate("/rider-verify-email", { replace: true });
+            return;
+          }
+          if (!userData.isVerified && userData.emailVerified) {
+            navigate("/rider-pending", { replace: true });
+            return;
+          }
         }
 
         setLoading(false);

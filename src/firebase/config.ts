@@ -6,11 +6,10 @@ import {
   persistentSingleTabManager,
 } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
-import {
-  getAnalytics,
-  setAnalyticsCollectionEnabled,
-} from "firebase/analytics";
-import { getStorage } from "firebase/storage";
+// import {
+//   getAnalytics,
+//   setAnalyticsCollectionEnabled,
+// } from "firebase/analytics";
 
 // Add type safety for collections
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];
@@ -20,7 +19,6 @@ const requiredEnvVars = [
   "VITE_FIREBASE_API_KEY",
   "VITE_FIREBASE_AUTH_DOMAIN",
   "VITE_FIREBASE_PROJECT_ID",
-  "VITE_FIREBASE_STORAGE_BUCKET",
   "VITE_FIREBASE_MESSAGING_SENDER_ID",
   "VITE_FIREBASE_APP_ID",
   "VITE_FIREBASE_MEASUREMENT_ID",
@@ -39,7 +37,6 @@ export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
@@ -64,7 +61,6 @@ export const db = initializeFirestore(app, {
 
 // Add region specification for functions
 export const functions = getFunctions(app, "us-central1");
-export const storage = getStorage(app);
 
 // Disable analytics to prevent ad blocker errors
 // const analytics = getAnalytics(app);

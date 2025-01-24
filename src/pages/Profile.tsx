@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { LogOut, User as UserIcon, Edit2, Check, X } from "lucide-react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import BottomNav from "../components/BottomNav";
+import WalletSection from "../components/user/WalletSection";
 
 interface UserDetails {
   firstName: string;
@@ -25,7 +26,9 @@ export default function Profile() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedDetails, setEditedDetails] = useState<Partial<UserDetails>>({});
   const [saving, setSaving] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(user?.emailVerified || false);
+  const [emailVerified, setEmailVerified] = useState(
+    user?.emailVerified || false
+  );
 
   useEffect(() => {
     setEmailVerified(user?.emailVerified || false);
@@ -135,7 +138,8 @@ export default function Profile() {
           </h2>
           <p className="text-gray-500">{editedDetails.email}</p>
         </div>
-
+        {/* Wallet Section */}
+        <WalletSection />
         {/* User Details */}
         <div className="bg-white rounded-lg p-6 space-y-4 shadow-sm">
           <h3 className="font-semibold text-gray-700">Personal Information</h3>

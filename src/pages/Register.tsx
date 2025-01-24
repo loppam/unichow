@@ -4,12 +4,13 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
 } from "firebase/auth";
-import { doc, setDoc, updateDoc } from "firebase/firestore";
+import { doc, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import Logo from "../components/Logo";
 import Input from "../components/Input";
 import { ArrowLeft, Store, User as UserIcon, Bike } from "lucide-react"; // Import icons
 import { notificationService } from "../services/notificationService";
+import { RiderStatus } from "../types/rider";
 
 const CUISINE_TYPES = ["Pastries", "Smoothies", "Fast Food"];
 
@@ -34,6 +35,11 @@ export default function Register() {
     minimumOrder: 0,
     vehicleType: "motorcycle",
     vehiclePlate: "",
+    // Additional rider fields
+    licenseNumber: "",
+    workingHours: "full-time",
+    emergencyContact: "",
+    emergencyPhone: "",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -66,6 +72,9 @@ export default function Register() {
         formData.password
       );
 
+      // Wait for auth state to be ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       // Prepare user data
       const userData = {
         email: formData.email,
@@ -92,35 +101,24 @@ export default function Register() {
           defaultAddress: formData.address,
         }),
         ...(userType === "rider" && {
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email,
-          phone: formData.phone,
           vehicleType: formData.vehicleType,
           vehiclePlate: formData.vehiclePlate,
           status: "offline",
           isVerified: false,
           rating: 0,
           totalDeliveries: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          licenseNumber: formData.licenseNumber,
+          workingHours: formData.workingHours,
+          emergencyContact: formData.emergencyContact,
+          emergencyPhone: formData.emergencyPhone,
         }),
       };
 
-      // Store in Firestore with retry logic
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          await setDoc(doc(db, "users", userCredential.user.uid), userData);
-          break;
-        } catch (firestoreError) {
-          retries--;
-          if (retries === 0) {
-            throw firestoreError;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-      }
+      // Store in Firestore
+      const batch = writeBatch(db);
+
+      // Update user document
+      batch.set(doc(db, "users", userCredential.user.uid), userData);
 
       // For restaurants, create an additional document in restaurants collection
       if (userType === "restaurant") {
@@ -134,48 +132,67 @@ export default function Register() {
           status: "pending",
           email: formData.email,
           phone: formData.phone,
-          address: formData.address,
+          address: {
+            address: formData.address,
+            additionalInstructions: ""
+          },
           createdAt: new Date().toISOString(),
         };
-        await setDoc(
-          doc(db, "restaurants", userCredential.user.uid),
-          restaurantData
-        );
+
+        // Update restaurant document
+        batch.set(doc(db, "restaurants", userCredential.user.uid), restaurantData);
+      }
+
+      // For riders, create additional rider document
+      if (userType === "rider") {
+        const riderData = {
+          id: userCredential.user.uid,
+          userId: userCredential.user.uid,
+          name: `${formData.firstName} ${formData.lastName}`,
+          email: formData.email,
+          phone: formData.phone,
+          vehicleType: formData.vehicleType,
+          vehiclePlate: formData.vehiclePlate,
+          status: "offline" as RiderStatus,
+          lastActivity: new Date().toISOString(),
+          assignedOrders: [],
+          completedOrders: 0,
+          rating: 0,
+          isVerified: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          licenseNumber: formData.licenseNumber,
+          workingHours: formData.workingHours,
+          emergencyContact: formData.emergencyContact,
+          emergencyPhone: formData.emergencyPhone,
+        };
+        batch.set(doc(db, "riders", userCredential.user.uid), riderData);
       }
 
       // Send verification email
       await sendEmailVerification(userCredential.user);
 
+      // Set up notifications for restaurants
+      if (userType === "restaurant") {
+        const subscription = await notificationService.requestPermission(
+          userCredential.user.uid
+        );
+        if (subscription) {
+          await updateDoc(doc(db, "restaurants", userCredential.user.uid), {
+            pushSubscription: JSON.stringify(subscription),
+          });
+        }
+      }
+
       // Navigate based on user type
       navigate(
-        userType === "restaurant" ? "/restaurant-verify-email" : "/verify-email"
+        userType === "restaurant" 
+          ? "/restaurant-verify-email" 
+          : userType === "rider"
+            ? "/rider-verify-email"
+            : "/verify-email"
       );
 
-      if (userType === "user") {
-        // Create initial customer document
-        await setDoc(doc(db, "customers", userCredential.user.uid), {
-          email: formData.email,
-          name: `${formData.firstName} ${formData.lastName}`,
-          phone: formData.phone,
-          savedAddresses: [
-            {
-              id: Date.now().toString(),
-              address: formData.address,
-              additionalInstructions: "",
-            },
-          ],
-        });
-      }
-
-      // After restaurant login/registration
-      const subscription = await notificationService.requestPermission(
-        userCredential.user.uid
-      );
-      if (subscription) {
-        await updateDoc(doc(db, "restaurants", userCredential.user.uid), {
-          pushSubscription: JSON.stringify(subscription),
-        });
-      }
     } catch (err) {
       console.error("Registration error:", err);
       if (err instanceof Error) {
@@ -247,6 +264,9 @@ export default function Register() {
     );
   };
 
+  // Add this consistent input style class
+  const inputClassName = "w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent";
+
   if (!userType) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center p-4">
@@ -259,9 +279,11 @@ export default function Register() {
           <div className="space-y-4">
             <button
               onClick={() => setUserType("user")}
-              className="w-full p-6 border rounded-lg flex items-center gap-4 hover:bg-gray-50"
+              className="w-full p-6 border rounded-lg flex items-center gap-4 hover:bg-gray-50 transition-colors"
             >
-              <UserIcon className="w-8 h-8" />
+              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                <UserIcon className="w-6 h-6 text-gray-600" />
+              </div>
               <div className="text-left">
                 <h3 className="font-semibold">Register as Customer</h3>
                 <p className="text-sm text-gray-500">
@@ -272,9 +294,11 @@ export default function Register() {
 
             <button
               onClick={() => setUserType("restaurant")}
-              className="w-full p-6 border rounded-lg flex items-center gap-4 hover:bg-gray-50"
+              className="w-full p-6 border rounded-lg flex items-center gap-4 hover:bg-gray-50 transition-colors"
             >
-              <Store className="w-8 h-8" />
+              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                <Store className="w-6 h-6 text-gray-600" />
+              </div>
               <div className="text-left">
                 <h3 className="font-semibold">Register as Restaurant</h3>
                 <p className="text-sm text-gray-500">
@@ -284,30 +308,28 @@ export default function Register() {
             </button>
 
             <button
-              type="button"
               onClick={() => setUserType("rider")}
-              className={`p-6 border rounded-lg text-center ${
-                userType === "rider"
-                  ? "border-blue-500 bg-blue-50"
-                  : "hover:border-gray-300"
-              }`}
+              className="w-full p-6 border rounded-lg flex items-center gap-4 hover:bg-gray-50 transition-colors"
             >
-              <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                <Bike className="h-6 w-6 text-blue-600" />
+              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                <Bike className="w-6 h-6 text-gray-600" />
               </div>
-              <h3 className="font-medium">Delivery Rider</h3>
-              <p className="text-sm text-gray-500 mt-2">
-                Join as a delivery partner
-              </p>
+              <div className="text-left">
+                <h3 className="font-semibold">Register as Rider</h3>
+                <p className="text-sm text-gray-500">
+                  Join as a delivery partner
+                </p>
+              </div>
             </button>
           </div>
+
+          <p className="text-center text-gray-600 mt-6">
+            Already have an account?{" "}
+            <Link to="/login" className="text-black font-medium">
+              Login
+            </Link>
+          </p>
         </div>
-        <p className="text-center text-gray-600 mt-6">
-          Already have an account?{" "}
-          <Link to="/login" className="text-black font-medium">
-            Login
-          </Link>
-        </p>
       </div>
     );
   }
@@ -337,106 +359,251 @@ export default function Register() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {userType === "restaurant" ? (
-            // Restaurant-specific fields
+          {userType === "restaurant" && (
             <>
-              <Input
-                name="restaurantName"
-                placeholder="Restaurant Name"
-                value={formData.restaurantName}
-                onChange={handleChange}
-                required
-              />
-              <Input
-                name="description"
-                placeholder="Restaurant Description"
-                value={formData.description}
-                onChange={handleChange}
-                required
-              />
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cuisine Types *
-                </label>
-                <CuisineSelect
-                  selected={formData.cuisineTypes}
-                  onChange={(values) =>
-                    setFormData((prev) => ({ ...prev, cuisineTypes: values }))
-                  }
-                />
-                {formData.cuisineTypes.length === 0 && (
-                  <p className="text-sm text-red-500 mt-1">
-                    Please select at least one cuisine type
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Operating Hours *
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">
-                      Opening Time
-                    </label>
-                    <div className="relative">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Restaurant Name *
+                  </label>
+                  <input
+                    name="restaurantName"
+                    placeholder="Enter restaurant name"
+                    value={formData.restaurantName}
+                    onChange={handleChange}
+                    className={inputClassName}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Restaurant Description *
+                  </label>
+                  <input
+                    name="description"
+                    placeholder="Enter restaurant description"
+                    value={formData.description}
+                    onChange={handleChange}
+                    className={inputClassName}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Cuisine Types *
+                  </label>
+                  <CuisineSelect
+                    selected={formData.cuisineTypes}
+                    onChange={(values) =>
+                      setFormData((prev) => ({ ...prev, cuisineTypes: values }))
+                    }
+                  />
+                  {formData.cuisineTypes.length === 0 && (
+                    <p className="text-sm text-red-500 mt-1">
+                      Please select at least one cuisine type
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Operating Hours *
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Opening Time
+                      </label>
                       <input
                         type="time"
                         name="openingHours"
                         value={formData.openingHours}
                         onChange={handleChange}
-                        className="w-full p-2 border rounded-lg appearance-none"
+                        className={inputClassName}
                         required
                       />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">e.g., 09:00AM</p>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">
-                      Closing Time
-                    </label>
-                    <div className="relative">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Closing Time
+                      </label>
                       <input
                         type="time"
                         name="closingHours"
                         value={formData.closingHours}
                         onChange={handleChange}
-                        className="w-full p-2 border rounded-lg appearance-none"
+                        className={inputClassName}
                         required
                       />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">e.g., 10:00PM</p>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Minimum Order Amount (₦) *
-                </label>
-                <div className="relative">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Minimum Order Amount (₦) *
+                  </label>
                   <input
                     type="number"
                     name="minimumOrder"
+                    placeholder="Enter minimum order amount"
                     value={formData.minimumOrder}
                     onChange={handleChange}
-                    className="w-full p-2 border rounded-lg"
+                    className={inputClassName}
                     min="0"
                     step="100"
                     required
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Minimum amount customers must order
-                </p>
               </div>
             </>
-          ) : null}
+          )}
+
+          {/* Common fields for all user types */}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email Address *
+              </label>
+              <input
+                name="email"
+                type="email"
+                placeholder="Enter your email address"
+                value={formData.email}
+                onChange={handleChange}
+                className={inputClassName}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Password *
+              </label>
+              <input
+                name="password"
+                type="password"
+                placeholder="Enter your password"
+                value={formData.password}
+                onChange={handleChange}
+                className={inputClassName}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Phone Number *
+              </label>
+              <input
+                name="phone"
+                placeholder="Enter your phone number"
+                value={formData.phone}
+                onChange={handleChange}
+                pattern="[0-9]*"
+                inputMode="numeric"
+                className={inputClassName}
+                required
+              />
+            </div>
+
+            {userType === "user" && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      First Name *
+                    </label>
+                    <input
+                      name="firstName"
+                      placeholder="Enter first name"
+                      value={formData.firstName}
+                      onChange={handleChange}
+                      className={inputClassName}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Last Name *
+                    </label>
+                    <input
+                      name="lastName"
+                      placeholder="Enter last name"
+                      value={formData.lastName}
+                      onChange={handleChange}
+                      className={inputClassName}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Birthday
+                  </label>
+                  <input
+                    name="birthday"
+                    type="date"
+                    placeholder="Select your birthday"
+                    value={formData.birthday}
+                    onChange={handleChange}
+                    className={inputClassName}
+                  />
+                </div>
+              </>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Full Address *
+              </label>
+              <input
+                name="address"
+                placeholder="Enter your full address"
+                value={formData.address}
+                onChange={handleChange}
+                className={inputClassName}
+                required
+              />
+            </div>
+          </div>
 
           {userType === "rider" && (
             <>
               <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      First Name *
+                    </label>
+                    <input
+                      name="firstName"
+                      placeholder="Enter first name"
+                      value={formData.firstName}
+                      onChange={handleChange}
+                      className={inputClassName}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Last Name *
+                    </label>
+                    <input
+                      name="lastName"
+                      placeholder="Enter last name"
+                      value={formData.lastName}
+                      onChange={handleChange}
+                      className={inputClassName}
+                      required
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Vehicle Type *
@@ -445,12 +612,12 @@ export default function Register() {
                     name="vehicleType"
                     value={formData.vehicleType}
                     onChange={handleChange}
-                    className="w-full p-2 border rounded-lg"
+                    className={inputClassName}
                     required
                   >
+                    <option value="">Select vehicle type</option>
                     <option value="motorcycle">Motorcycle</option>
                     <option value="bicycle">Bicycle</option>
-                    <option value="car">Car</option>
                   </select>
                 </div>
 
@@ -463,7 +630,70 @@ export default function Register() {
                     name="vehiclePlate"
                     value={formData.vehiclePlate}
                     onChange={handleChange}
-                    className="w-full p-2 border rounded-lg"
+                    className={inputClassName}
+                    placeholder="Enter vehicle plate number"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Driver's License Number *
+                  </label>
+                  <input
+                    type="text"
+                    name="licenseNumber"
+                    value={formData.licenseNumber}
+                    onChange={handleChange}
+                    className={inputClassName}
+                    placeholder="Enter driver's license number"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Working Hours
+                  </label>
+                  <select
+                    name="workingHours"
+                    value={formData.workingHours}
+                    onChange={handleChange}
+                    className={inputClassName}
+                  >
+                    <option value="">Select working hours</option>
+                    <option value="full-time">Full Time</option>
+                    <option value="part-time">Part Time</option>
+                    <option value="weekends">Weekends Only</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Emergency Contact Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="emergencyContact"
+                    value={formData.emergencyContact}
+                    onChange={handleChange}
+                    className={inputClassName}
+                    placeholder="Enter emergency contact name"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Emergency Contact Phone *
+                  </label>
+                  <input
+                    type="tel"
+                    name="emergencyPhone"
+                    value={formData.emergencyPhone}
+                    onChange={handleChange}
+                    className={inputClassName}
+                    placeholder="Enter emergency contact phone"
                     required
                   />
                 </div>
@@ -471,66 +701,6 @@ export default function Register() {
             </>
           )}
 
-          {/* Common fields for both types */}
-          <Input
-            name="email"
-            type="email"
-            placeholder="Email address"
-            value={formData.email}
-            onChange={handleChange}
-            required
-          />
-          <Input
-            name="password"
-            type="password"
-            placeholder="Password"
-            value={formData.password}
-            onChange={handleChange}
-            required
-          />
-          <Input
-            name="phone"
-            placeholder="Phone number"
-            value={formData.phone}
-            onChange={handleChange}
-            pattern="[0-9]*"
-            inputMode="numeric"
-            required
-          />
-          {userType === "user" && (
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                name="firstName"
-                placeholder="First name"
-                value={formData.firstName}
-                onChange={handleChange}
-                required
-              />
-              <Input
-                name="lastName"
-                placeholder="Last name"
-                value={formData.lastName}
-                onChange={handleChange}
-                required
-              />
-            </div>
-          )}
-          <Input
-            name="address"
-            placeholder="Full Address"
-            value={formData.address}
-            onChange={handleChange}
-            required
-          />
-          {userType === "user" && (
-            <Input
-              name="birthday"
-              type="date"
-              placeholder="Birthday"
-              value={formData.birthday}
-              onChange={handleChange}
-            />
-          )}
           <button
             type="submit"
             className="btn-primary w-full"

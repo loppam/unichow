@@ -4,7 +4,7 @@ declare module '@paystack/inline-js' {
     email: string | null | undefined;
     amount: number;
     text?: string;
-    onSuccess: (reference: any) => Promise<void>;
+    onSuccess: (reference: { reference: string }) => Promise<void>;
     onClose: () => void;
     metadata: {
       custom_fields: Array<{

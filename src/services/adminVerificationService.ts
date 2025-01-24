@@ -13,6 +13,7 @@ import {
 import {
   VerificationDocument,
   VerificationStatus,
+  RiderVerification,
 } from "../types/verification";
 
 interface RestaurantVerification {
@@ -123,5 +124,97 @@ export const adminVerificationService = {
       console.error("Error updating verification status:", error);
       throw error;
     }
+  },
+
+  async getPendingRiderVerifications(): Promise<RiderVerification[]> {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("userType", "==", "rider"));
+    const snapshot = await getDocs(q);
+
+    const verifications: RiderVerification[] = [];
+
+    for (const userDoc of snapshot.docs) {
+      const userData = userDoc.data();
+      const verificationDocs = await getDocs(
+        collection(db, `riders/${userDoc.id}/verification`)
+      );
+
+      const documents = verificationDocs.docs
+        .filter((doc) => doc.id !== "status")
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as VerificationDocument[];
+
+      verifications.push({
+        riderId: userDoc.id,
+        riderName: userData.name,
+        email: userData.email,
+        phone: userData.phone,
+        vehicleType: userData.vehicleType,
+        vehiclePlate: userData.vehiclePlate,
+        status: {
+          isVerified: userData.isVerified === true,
+          state: userData.status === 'rejected' ? 'rejected' : 
+                 userData.isVerified ? 'approved' : 'pending'
+        },
+        documents,
+      });
+    }
+
+    return verifications;
+  },
+
+  async updateRiderVerificationStatus(
+    riderId: string,
+    isVerified: boolean
+  ): Promise<void> {
+    try {
+      const batch = writeBatch(db);
+      const statusRef = doc(db, `riders/${riderId}/verification/status`);
+      const statusDoc = await getDoc(statusRef);
+
+      const status = {
+        isVerified,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      if (!statusDoc.exists()) {
+        await setDoc(statusRef, status);
+      } else {
+        await updateDoc(statusRef, status);
+      }
+
+      const riderRef = doc(db, "riders", riderId);
+      const userRef = doc(db, "users", riderId);
+
+      const updates = {
+        status: isVerified ? "approved" : "pending",
+        isVerified,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      batch.update(riderRef, updates);
+      batch.update(userRef, updates);
+
+      await batch.commit();
+    } catch (error) {
+      console.error("Error updating verification status:", error);
+      throw error;
+    }
+  },
+
+  async reviewRiderDocument(
+    riderId: string,
+    documentId: string,
+    status: "approved" | "rejected",
+    rejectionReason?: string
+  ): Promise<void> {
+    const docRef = doc(db, `riders/${riderId}/verification/${documentId}`);
+    await updateDoc(docRef, {
+      status,
+      reviewedAt: new Date().toISOString(),
+      ...(rejectionReason && { rejectionReason }),
+    });
   },
 };

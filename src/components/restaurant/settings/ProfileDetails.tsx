@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, writeBatch } from "firebase/firestore";
 import { db } from "../../../firebase/config";
 import { useAuth } from "../../../contexts/AuthContext";
 import { toast } from "react-hot-toast";
+import { restaurantService } from "../../../services/restaurantService";
+import SubaccountBalance from "../../common/SubaccountBalance";
 
 interface ProfileDetailsProps {
   data: {
@@ -12,7 +14,7 @@ interface ProfileDetailsProps {
     phone: string;
     restaurantName: string;
     description: string;
-    cuisine: string[];
+    cuisineTypes: string[];
     address: {
       address: string;
       additionalInstructions: string;
@@ -20,6 +22,9 @@ interface ProfileDetailsProps {
     minimumOrder: number;
     logo?: string;
     bannerImage?: string;
+    paymentInfo?: {
+      paystackSubaccountCode: string;
+    };
   };
 }
 
@@ -37,7 +42,7 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
     // Company Details
     restaurantName: data?.restaurantName || "",
     description: data?.description || "",
-    cuisine: data?.cuisine || [],
+    cuisineTypes: data?.cuisineTypes || [],
     address: data?.address || { address: "", additionalInstructions: "" },
     minimumOrder: data?.minimumOrder || 0,
     logo: data?.logo || "",
@@ -53,16 +58,6 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-    }));
-  };
-
-  const handleCuisineChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedOptions = Array.from(e.target.selectedOptions).map(
-      (option) => option.value
-    );
-    setFormData((prev) => ({
-      ...prev,
-      cuisine: selectedOptions,
     }));
   };
 
@@ -85,20 +80,42 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
 
     try {
       setSaving(true);
+
+      // First sync the address update
+      await restaurantService.syncAddressUpdate(user.uid, formData.address);
+
+      // Create a batch to update both collections
+      const batch = writeBatch(db);
       const restaurantRef = doc(db, "restaurants", user.uid);
-      await updateDoc(restaurantRef, {
-        // Personal Details
+      const userRef = doc(db, "users", user.uid);
+      const timestamp = new Date().toISOString();
+
+      // Updates for restaurant collection
+      const restaurantUpdates = {
         firstName: formData.firstName,
         lastName: formData.lastName,
         phone: formData.phone,
-        // Company Details
         restaurantName: formData.restaurantName,
         description: formData.description,
-        cuisine: formData.cuisine,
-        address: formData.address,
+        cuisineTypes: formData.cuisineTypes,
         minimumOrder: Number(formData.minimumOrder),
-        lastUpdated: new Date().toISOString(),
-      });
+        lastUpdated: timestamp,
+      };
+
+      // Updates for user collection - sync relevant fields
+      const userUpdates = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        restaurantName: formData.restaurantName,
+        lastUpdated: timestamp,
+      };
+
+      batch.update(restaurantRef, restaurantUpdates);
+      batch.update(userRef, userUpdates);
+
+      await batch.commit();
+
       toast.success("Profile details updated successfully");
     } catch (error) {
       console.error("Error updating profile details:", error);
@@ -146,6 +163,14 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
             />
           </div>
         </div>
+        {data.paymentInfo?.paystackSubaccountCode && (
+          <div className="mb-6">
+            <SubaccountBalance
+              subaccountCode={data.paymentInfo.paystackSubaccountCode}
+              autoRefreshInterval={300000}
+            />
+          </div>
+        )}
       </div>
 
       {/* Company Details Section */}
@@ -186,20 +211,30 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Cuisine Types
             </label>
-            <select
-              multiple
-              name="cuisine"
-              value={formData.cuisine}
-              onChange={handleCuisineChange}
-              className="w-full p-2 border rounded-lg"
-              required
-            >
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-2 border rounded-lg">
               {CUISINE_TYPES.map((cuisine) => (
-                <option key={cuisine} value={cuisine}>
-                  {cuisine}
-                </option>
+                <label
+                  key={cuisine}
+                  className="flex items-center space-x-2 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.cuisineTypes.includes(cuisine)}
+                    onChange={(e) => {
+                      const updatedCuisine = e.target.checked
+                        ? [...formData.cuisineTypes, cuisine]
+                        : formData.cuisineTypes.filter((c) => c !== cuisine);
+                      setFormData((prev) => ({
+                        ...prev,
+                        cuisineTypes: updatedCuisine,
+                      }));
+                    }}
+                    className="rounded border-gray-300 text-black focus:ring-black"
+                  />
+                  <span className="text-sm text-gray-700">{cuisine}</span>
+                </label>
               ))}
-            </select>
+            </div>
           </div>
           <div className="grid md:grid-cols-1 gap-6">
             <div>

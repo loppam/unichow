@@ -23,6 +23,9 @@ export default function EmailVerification() {
       if (user) {
         setCurrentUser(user);
         
+        // Add delay to ensure auth state is stable
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         // Check Firestore first
         const userDoc = await getDoc(doc(db, "users", user.uid));
         const userData = userDoc.data();
@@ -39,6 +42,15 @@ export default function EmailVerification() {
             } else {
               navigate('/restaurant-dashboard');
             }
+          } else if (userData.userType === 'rider') {
+            const riderDoc = await getDoc(doc(db, "riders", user.uid));
+            const riderData = riderDoc.data();
+            
+            if (!riderData?.isVerified) {
+              navigate('/rider-pending');
+            } else {
+              navigate('/rider-dashboard');
+            }
           } else {
             navigate('/home');
           }
@@ -46,8 +58,24 @@ export default function EmailVerification() {
         }
         
         if (!emailSent) {
-          sendVerificationEmail(user);
+          try {
+            await sendEmailVerification(user);
+            setEmailSent(true);
+          } catch (error) {
+            console.error("Error sending verification email:", error);
+            if (error instanceof Error && error.message.includes('auth/user-token-expired')) {
+              // Redirect to login if token expired
+              navigate('/login', { 
+                state: { 
+                  error: "Session expired. Please login again to verify your email." 
+                }
+              });
+            }
+          }
         }
+      } else {
+        // No user is signed in, redirect to login
+        navigate('/login');
       }
     });
 
@@ -130,6 +158,8 @@ export default function EmailVerification() {
           } else {
             navigate('/restaurant-dashboard');
           }
+        } else if (userData?.userType === 'rider') {
+          navigate('/rider-pending');
         } else {
           navigate('/home');
         }

@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { collection, query, where, getDocs, Timestamp, getDoc, doc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  Timestamp,
+  getDoc,
+  doc,
+} from "firebase/firestore";
 import { db } from "../../firebase/config";
 import { Users, ShoppingBag, TrendingUp, DollarSign } from "lucide-react";
 import { auth } from "../../firebase/config";
@@ -9,6 +17,8 @@ import { toast } from "react-hot-toast";
 interface AnalyticsData {
   totalRestaurants: number;
   totalOrders: number;
+  totalUsers: number;
+  totalRiders: number;
   recentOrders: number;
   totalRevenue: number;
   totalServiceFee: number;
@@ -42,72 +52,102 @@ async function fetchAnalytics(): Promise<AnalyticsData> {
   try {
     const currentUser = auth.currentUser;
     const userDoc = await getDoc(doc(db, "users", currentUser?.uid || ""));
-    const adminType = userDoc.data()?.role === "superadmin" ? "Super Admin" : "Admin";
+    const adminType =
+      userDoc.data()?.role === "superadmin" ? "Super Admin" : "Admin";
 
     const restaurantsRef = collection(db, "users");
+    const usersRef = collection(db, "users");
     const ordersRef = collection(db, "orders");
-    
+
     // Get restaurants with userType = restaurant
-    const restaurantsQuery = query(restaurantsRef, where("userType", "==", "restaurant"));
-    const restaurantsSnapshot = await getDocs(restaurantsQuery);
-    
-    // Get completed orders only
-    const ordersQuery = query(
-      ordersRef, 
-      where("status", "==", "delivered")
+    const restaurantsQuery = query(
+      restaurantsRef,
+      where("userType", "==", "restaurant")
     );
+    const restaurantsSnapshot = await getDocs(restaurantsQuery);
+
+    // Get completed orders only
+    const ordersQuery = query(ordersRef, where("status", "==", "delivered"));
     const ordersSnapshot = await getDocs(ordersQuery);
     const orders = ordersSnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     })) as Order[];
-    
+
     // Calculate daily orders for the last 7 days
-    const last7Days = [...Array(7)].map((_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      return date.toISOString().split("T")[0];
-    }).reverse();
+    const last7Days = [...Array(7)]
+      .map((_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        return date.toISOString().split("T")[0];
+      })
+      .reverse();
 
     const dailyOrders = last7Days.map((date) => ({
       date,
       count: orders.filter((order) => {
-        const orderDate = order.createdAt instanceof Timestamp 
-          ? order.createdAt.toDate().toISOString().split("T")[0]
-          : new Date(order.createdAt).toISOString().split("T")[0];
+        const orderDate =
+          order.createdAt instanceof Timestamp
+            ? order.createdAt.toDate().toISOString().split("T")[0]
+            : new Date(order.createdAt).toISOString().split("T")[0];
         return orderDate === date;
       }).length,
     }));
 
     // Count restaurants by status
     const restaurantsByStatus = {
-      approved: restaurantsSnapshot.docs.filter((doc) => doc.data().isApproved === true).length,
-      pending: restaurantsSnapshot.docs.filter(doc => 
-        doc.data().isApproved !== true && doc.data().status !== "rejected"
+      approved: restaurantsSnapshot.docs.filter(
+        (doc) => doc.data().isApproved === true
       ).length,
-      rejected: restaurantsSnapshot.docs.filter(doc => doc.data().status === "rejected").length,
+      pending: restaurantsSnapshot.docs.filter(
+        (doc) =>
+          doc.data().isApproved !== true && doc.data().status !== "rejected"
+      ).length,
+      rejected: restaurantsSnapshot.docs.filter(
+        (doc) => doc.data().status === "rejected"
+      ).length,
     };
 
     // Calculate recent orders (last 24 hours)
     const oneDayAgo = new Date();
     oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-    
+
     const recentOrders = orders.filter((order) => {
-      const orderDate = order.createdAt instanceof Timestamp 
-        ? order.createdAt.toDate()
-        : new Date(order.createdAt);
+      const orderDate =
+        order.createdAt instanceof Timestamp
+          ? order.createdAt.toDate()
+          : new Date(order.createdAt);
       return orderDate >= oneDayAgo;
     }).length;
+
+    // Get users count
+    const usersQuery = query(
+      usersRef,
+      where("userType", "==", "user"),
+      where("emailVerified", "==", true)
+    );
+    const usersSnapshot = await getDocs(usersQuery);
+
+    // Get riders count
+    const ridersQuery = query(
+      usersRef,
+      where("userType", "==", "rider"),
+      where("isVerified", "==", true),
+      where("status", "==", "approved")
+    );
+    const ridersSnapshot = await getDocs(ridersQuery);
 
     return {
       totalRestaurants: restaurantsSnapshot.size,
       totalOrders: ordersSnapshot.size,
+      totalUsers: usersSnapshot.size,
+      totalRiders: ridersSnapshot.size,
       recentOrders,
       totalRevenue: orders.reduce((sum, order) => sum + (order.total || 0), 0),
       totalServiceFee: orders.reduce((sum, order) => {
         const subtotal = (order.total || 0) - (order.deliveryFee || 0);
         const feePercentage = order.serviceFeePercentage || 0.1;
-        return sum + (subtotal * feePercentage);
+        return sum + subtotal * feePercentage;
       }, 0),
       adminType,
       dailyOrders,
@@ -123,7 +163,8 @@ export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [deliverySettings, setDeliverySettings] = useState<DeliverySettings | null>(null);
+  const [deliverySettings, setDeliverySettings] =
+    useState<DeliverySettings | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -137,7 +178,9 @@ export default function AdminDashboard() {
         }
       } catch (err) {
         if (isMounted) {
-          setError(err instanceof Error ? err.message : "Failed to load analytics data");
+          setError(
+            err instanceof Error ? err.message : "Failed to load analytics data"
+          );
         }
         console.error(err);
       } finally {
@@ -160,21 +203,23 @@ export default function AdminDashboard() {
         const settings = await adminSettingsService.getDeliverySettings();
         setDeliverySettings(settings);
       } catch (error) {
-        console.error('Error loading delivery settings:', error);
-        toast.error('Failed to load delivery settings');
+        console.error("Error loading delivery settings:", error);
+        toast.error("Failed to load delivery settings");
       }
     };
 
     loadDeliverySettings();
   }, []);
 
-  const handleDeliverySettingsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDeliverySettingsChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const { name, value } = e.target;
     if (!deliverySettings) return;
-    
-    setDeliverySettings(prev => ({
+
+    setDeliverySettings((prev) => ({
       ...prev!,
-      [name]: Number(value)
+      [name]: Number(value),
     }));
   };
 
@@ -185,10 +230,10 @@ export default function AdminDashboard() {
     try {
       setSaving(true);
       await adminSettingsService.updateDeliverySettings(deliverySettings);
-      toast.success('Delivery settings updated successfully');
+      toast.success("Delivery settings updated successfully");
     } catch (error) {
-      console.error('Error updating delivery settings:', error);
-      toast.error('Failed to update delivery settings');
+      console.error("Error updating delivery settings:", error);
+      toast.error("Failed to update delivery settings");
     } finally {
       setSaving(false);
     }
@@ -218,16 +263,22 @@ export default function AdminDashboard() {
       color: "bg-blue-500",
     },
     {
+      title: "Total Users",
+      value: analytics.totalUsers,
+      icon: Users,
+      color: "bg-green-500",
+    },
+    {
+      title: "Total Riders",
+      value: analytics.totalRiders,
+      icon: Users,
+      color: "bg-red-500",
+    },
+    {
       title: "Total Orders",
       value: analytics.totalOrders,
       icon: ShoppingBag,
       color: "bg-green-500",
-    },
-    {
-      title: "Recent Orders",
-      value: analytics.recentOrders,
-      icon: TrendingUp,
-      color: "bg-yellow-500",
     },
     {
       title: "Total Revenue",
@@ -298,9 +349,7 @@ export default function AdminDashboard() {
 
       {/* Delivery Settings */}
       <div className="bg-white p-6 rounded-lg shadow-sm">
-        <h2 className="text-lg font-semibold mb-4">
-          Delivery Settings
-        </h2>
+        <h2 className="text-lg font-semibold mb-4">Delivery Settings</h2>
         {deliverySettings ? (
           <form onSubmit={handleDeliverySettingsSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -343,14 +392,12 @@ export default function AdminDashboard() {
                 disabled={saving}
                 className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-400"
               >
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </form>
         ) : (
-          <div className="text-center py-4">
-            Loading delivery settings...
-          </div>
+          <div className="text-center py-4">Loading delivery settings...</div>
         )}
       </div>
     </div>

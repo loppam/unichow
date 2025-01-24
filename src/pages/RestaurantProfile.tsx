@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { restaurantService } from '../services/restaurantService';
-import { toast } from 'react-hot-toast';
-import { RestaurantStatus } from '../types/restaurant';
-import { Address } from '../types/order';
-import { getDoc, doc } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { restaurantService } from "../services/restaurantService";
+import { toast } from "react-hot-toast";
+import { RestaurantStatus } from "../types/restaurant";
+import { Address } from "../types/order";
+import { getDoc, doc } from "firebase/firestore";
+import { db } from "../firebase/config";
 
 interface RestaurantProfile {
   id: string;
@@ -37,67 +37,70 @@ export default function RestaurantProfile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<RestaurantProfile>({
-    id: '',
-    restaurantName: '',
-    description: '',
+    id: "",
+    restaurantName: "",
+    description: "",
     cuisine: [],
     address: {
-      address: '',
-      additionalInstructions: ''
+      address: "",
+      additionalInstructions: "",
     },
-    phone: '',
-    email: '',
-    openingHours: '',
-    closingHours: '',
+    phone: "",
+    email: "",
+    openingHours: "",
+    closingHours: "",
     minimumOrder: 0,
     profileComplete: false,
-    status: 'pending',
+    status: "pending",
     isApproved: false,
     rating: 0,
     totalOrders: 0,
-    createdAt: '',
-    updatedAt: ''
+    createdAt: "",
+    updatedAt: "",
   });
 
   useEffect(() => {
     if (!user) {
-      toast.error('Please login to access this page');
-      navigate('/login');
+      toast.error("Please login to access this page");
+      navigate("/login");
       return;
     }
+
+    const fetchProfile = async () => {
+      if (!user?.uid) {
+        toast.error("Authentication required");
+        navigate("/login");
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const restaurantData = await restaurantService.getRestaurantProfile(
+          user.uid
+        );
+        if (restaurantData) {
+          setProfile((prev) => ({
+            ...prev,
+            ...restaurantData,
+          }));
+        }
+      } catch (err) {
+        toast.error("Failed to load profile");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchProfile();
   }, [user, navigate]);
 
-  const fetchProfile = async () => {
-    if (!user?.uid) {
-      toast.error('Authentication required');
-      navigate('/login');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const restaurantData = await restaurantService.getRestaurantProfile(user.uid);
-      if (restaurantData) {
-        setProfile(prev => ({
-          ...prev,
-          ...restaurantData
-        }));
-      }
-    } catch (err) {
-      toast.error('Failed to load profile');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user?.uid) {
-      toast.error('Authentication required');
-      navigate('/login');
+      toast.error("Authentication required");
+      navigate("/login");
       return;
     }
 
@@ -107,53 +110,70 @@ export default function RestaurantProfile() {
 
     try {
       // Validate required fields
-      const requiredFields = ['restaurantName', 'description', 'address', 'phone'] as const;
-      const missingFields = requiredFields.filter(field => !formData.get(field));
-      
+      const requiredFields = [
+        "restaurantName",
+        "description",
+        "address",
+        "phone",
+      ] as const;
+      const missingFields = requiredFields.filter(
+        (field) => !formData.get(field)
+      );
+
       if (missingFields.length > 0) {
-        throw new Error(`Please fill in all required fields: ${missingFields.join(', ')}`);
+        throw new Error(
+          `Please fill in all required fields: ${missingFields.join(", ")}`
+        );
       }
 
-      const logoFile = formData.get('logo') as File;
-      const bannerFile = formData.get('banner') as File;
+      // First, sync the address update
+      await restaurantService.syncAddressUpdate(user.uid, {
+        address: formData.get("address") as string,
+        additionalInstructions: formData.get("addressInstructions") as string,
+      });
+
+      // Then update the rest of the profile
+      const logoFile = formData.get("logo") as File;
+      const bannerFile = formData.get("banner") as File;
 
       await restaurantService.updateProfile(
         user.uid,
         {
           ...profile,
-          restaurantName: formData.get('restaurantName') as string,
-          description: formData.get('description') as string,
-          address: {
-            address: formData.get('address') as string,
-            additionalInstructions: formData.get('addressInstructions') as string
-          },
-          phone: formData.get('phone') as string,
-          openingHours: formData.get('openingHours') as string,
-          closingHours: formData.get('closingHours') as string,
-          minimumOrder: Number(formData.get('minimumOrder')),
+          restaurantName: formData.get("restaurantName") as string,
+          description: formData.get("description") as string,
+          phone: formData.get("phone") as string,
+          openingHours: formData.get("openingHours") as string,
+          closingHours: formData.get("closingHours") as string,
+          minimumOrder: Number(formData.get("minimumOrder")),
           profileComplete: true,
-          lastUpdated: new Date().toISOString()
+          lastUpdated: new Date().toISOString(),
         },
         { logo: logoFile, banner: bannerFile }
       );
 
       // Check if payment info is set up
-      const restaurantDoc = await getDoc(doc(db, 'restaurants', user.uid));
+      const restaurantDoc = await getDoc(doc(db, "restaurants", user.uid));
       const restaurantData = restaurantDoc.data();
 
       if (!restaurantData?.paymentInfo?.isVerified) {
-        toast.success('Profile updated successfully. Please set up your payment information to start receiving orders.', {
-          duration: 5000,
-          icon: '💳'
-        });
-        navigate('/restaurant-settings?section=payment');
+        toast.success(
+          "Profile updated successfully. Please set up your payment information to start receiving orders.",
+          {
+            duration: 5000,
+            icon: "💳",
+          }
+        );
+        navigate("/restaurant-settings?section=payment");
       } else {
-        toast.success('Profile updated successfully');
-        navigate('/restaurant-dashboard');
+        toast.success("Profile updated successfully");
+        navigate("/restaurant-dashboard");
       }
     } catch (err) {
-      console.error('Error updating profile:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to update profile');
+      console.error("Error updating profile:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update profile"
+      );
     } finally {
       setSaving(false);
     }
@@ -167,14 +187,19 @@ export default function RestaurantProfile() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-3xl mx-auto px-4">
         <h1 className="text-2xl font-bold mb-6">Restaurant Profile</h1>
-        
-        <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow">
+
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-6 bg-white p-6 rounded-lg shadow"
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <FormField
               label="Restaurant Name"
               name="restaurantName"
               value={profile.restaurantName}
-              onChange={(value) => setProfile(p => ({ ...p, restaurantName: value }))}
+              onChange={(value) =>
+                setProfile((p) => ({ ...p, restaurantName: value }))
+              }
               required
             />
 
@@ -183,7 +208,7 @@ export default function RestaurantProfile() {
               name="phone"
               type="tel"
               value={profile.phone}
-              onChange={(value) => setProfile(p => ({ ...p, phone: value }))}
+              onChange={(value) => setProfile((p) => ({ ...p, phone: value }))}
               required
             />
 
@@ -193,7 +218,9 @@ export default function RestaurantProfile() {
                 name="description"
                 type="textarea"
                 value={profile.description}
-                onChange={(value) => setProfile(p => ({ ...p, description: value }))}
+                onChange={(value) =>
+                  setProfile((p) => ({ ...p, description: value }))
+                }
                 required
               />
             </div>
@@ -204,20 +231,24 @@ export default function RestaurantProfile() {
                   label="Address"
                   name="address"
                   value={profile.address.address}
-                  onChange={(value) => setProfile(p => ({ 
-                    ...p, 
-                    address: { ...p.address, address: value }
-                  }))}
+                  onChange={(value) =>
+                    setProfile((p) => ({
+                      ...p,
+                      address: { ...p.address, address: value },
+                    }))
+                  }
                   required
                 />
                 <FormField
                   label="Additional Instructions"
                   name="addressInstructions"
-                  value={profile.address.additionalInstructions || ''}
-                  onChange={(value) => setProfile(p => ({ 
-                    ...p, 
-                    address: { ...p.address, additionalInstructions: value }
-                  }))}
+                  value={profile.address.additionalInstructions || ""}
+                  onChange={(value) =>
+                    setProfile((p) => ({
+                      ...p,
+                      address: { ...p.address, additionalInstructions: value },
+                    }))
+                  }
                 />
               </div>
             </div>
@@ -227,7 +258,9 @@ export default function RestaurantProfile() {
               name="openingHours"
               type="time"
               value={profile.openingHours}
-              onChange={(value) => setProfile(p => ({ ...p, openingHours: value }))}
+              onChange={(value) =>
+                setProfile((p) => ({ ...p, openingHours: value }))
+              }
               required
             />
 
@@ -236,7 +269,9 @@ export default function RestaurantProfile() {
               name="closingHours"
               type="time"
               value={profile.closingHours}
-              onChange={(value) => setProfile(p => ({ ...p, closingHours: value }))}
+              onChange={(value) =>
+                setProfile((p) => ({ ...p, closingHours: value }))
+              }
               required
             />
 
@@ -245,7 +280,9 @@ export default function RestaurantProfile() {
               name="minimumOrder"
               type="number"
               value={profile.minimumOrder.toString()}
-              onChange={(value) => setProfile(p => ({ ...p, minimumOrder: Number(value) }))}
+              onChange={(value) =>
+                setProfile((p) => ({ ...p, minimumOrder: Number(value) }))
+              }
               min="0"
               step="100"
             />
@@ -264,7 +301,7 @@ export default function RestaurantProfile() {
           </div>
 
           <FormActions
-            onCancel={() => navigate('/restaurant-dashboard')}
+            onCancel={() => navigate("/restaurant-dashboard")}
             saving={saving}
           />
         </form>
@@ -280,14 +317,18 @@ const LoadingSpinner = () => (
   </div>
 );
 
-const FormField = ({ 
-  label, 
-  name, 
-  type = 'text', 
-  value, 
+const FormField = ({
+  label,
+  name,
+  type = "text",
+  value,
   onChange,
   required = false,
-  ...props 
+  min,
+  max,
+  step,
+  rows,
+  placeholder,
 }: {
   label: string;
   name: string;
@@ -295,21 +336,25 @@ const FormField = ({
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
-  [key: string]: any;
+  min?: string | number;
+  max?: string | number;
+  step?: string | number;
+  rows?: number;
+  placeholder?: string;
 }) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 mb-2">
-      {label} {required && '*'}
+      {label} {required && "*"}
     </label>
-    {type === 'textarea' ? (
+    {type === "textarea" ? (
       <textarea
         name={name}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full p-2 border rounded-lg"
-        rows={4}
+        rows={rows}
         required={required}
-        {...props}
+        placeholder={placeholder}
       />
     ) : (
       <input
@@ -319,16 +364,18 @@ const FormField = ({
         onChange={(e) => onChange(e.target.value)}
         className="w-full p-2 border rounded-lg"
         required={required}
-        {...props}
+        min={min}
+        max={max}
+        step={step}
       />
     )}
   </div>
 );
 
-const ImageUploadField = ({ 
-  label, 
-  name, 
-  currentImage 
+const ImageUploadField = ({
+  label,
+  name,
+  currentImage,
 }: {
   label: string;
   name: string;
@@ -354,9 +401,9 @@ const ImageUploadField = ({
   </div>
 );
 
-const FormActions = ({ 
-  onCancel, 
-  saving 
+const FormActions = ({
+  onCancel,
+  saving,
 }: {
   onCancel: () => void;
   saving: boolean;
@@ -374,7 +421,7 @@ const FormActions = ({
       disabled={saving}
       className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
     >
-      {saving ? 'Saving...' : 'Save Profile'}
+      {saving ? "Saving..." : "Save Profile"}
     </button>
   </div>
-); 
+);

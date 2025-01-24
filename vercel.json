@@ -2,6 +2,21 @@
   "version": 2,
   "routes": [
     {
+      "src": "/service-worker.js",
+      "headers": {
+        "cache-control": "public, max-age=0, must-revalidate",
+        "Service-Worker-Allowed": "/"
+      },
+      "dest": "/service-worker.js"
+    },
+    {
+      "src": "/index.html",
+      "headers": {
+        "cache-control": "public, max-age=0, must-revalidate"
+      },
+      "dest": "/index.html"
+    },
+    {
       "src": "/firebase-messaging-sw.js",
       "headers": {
         "cache-control": "public, max-age=0, must-revalidate",
@@ -61,10 +76,6 @@
     {
       "src": "/api/(.*)",
       "dest": "/api/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
     }
   ]
 }

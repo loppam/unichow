@@ -54,8 +54,8 @@ export default function UserManagement() {
       const userRef = doc(db, "users", userId);
       await deleteDoc(userRef);
       setUsers((prev) => prev.filter((user) => user.id !== userId));
-    } catch (err: any) {
-      setError(err.message || "Failed to delete user");
+    } catch (err: unknown) {
+      setError((err as Error)?.message || "Failed to delete user");
       console.error(err);
     }
   };

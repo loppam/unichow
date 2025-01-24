@@ -96,8 +96,8 @@ export default function CreateAdmin() {
         role: ROLES.ADMIN,
       });
       loadUsers(); // Reload the user list after creating new admin
-    } catch (err: any) {
-      setError(err.message || "Failed to create admin account");
+    } catch (err: unknown) {
+      setError((err as Error)?.message || "Failed to create admin account");
       console.error(err);
     } finally {
       setLoading(false);
@@ -111,8 +111,8 @@ export default function CreateAdmin() {
       const userRef = doc(db, "users", userId);
       await deleteDoc(userRef);
       setUsers((prev) => prev.filter((user) => user.id !== userId));
-    } catch (err: any) {
-      setError(err.message || "Failed to delete user");
+    } catch (err: unknown) {
+      setError((err as Error)?.message || "Failed to delete user");
       console.error(err);
     }
   };

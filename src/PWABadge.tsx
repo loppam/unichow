@@ -1,74 +1,71 @@
-import './PWABadge.css'
-import { registerSW } from 'virtual:pwa-register'
-import { useState, useEffect } from 'react'
+import "./PWABadge.css";
+import { registerSW } from "virtual:pwa-register";
+import { useState, useEffect } from "react";
 
 function PWABadge() {
-  const [needRefresh, setNeedRefresh] = useState(false)
-  const [offlineReady, setOfflineReady] = useState(false)
+  const [needRefresh, setNeedRefresh] = useState(false);
+  const [offlineReady, setOfflineReady] = useState(false);
 
   useEffect(() => {
     const updateSW = registerSW({
       onRegistered(registration) {
-        // Check for updates every 5 minutes
+        // Check for updates more frequently
         setInterval(() => {
-          registration?.update()
-        }, 5 * 60 * 1000)
-      },
-      onRegisterError(error) {
-        console.error('SW registration error', error)
+          registration?.update();
+        }, 2 * 60 * 1000); // Every 2 minutes
+
+        // Force immediate check
+        registration?.update();
       },
       onNeedRefresh() {
-        setNeedRefresh(true)
+        setNeedRefresh(true);
+        // Clear all caches when update is available
+        if ("caches" in window) {
+          caches.keys().then((keys) => {
+            keys.forEach((key) => caches.delete(key));
+          });
+        }
       },
       onOfflineReady() {
-        setOfflineReady(true)
+        setOfflineReady(true);
       },
       immediate: true,
-    })
+    });
+
+    // Force reload after 12 hours to ensure fresh content
+    const forceReloadTimeout = setTimeout(() => {
+      window.location.reload();
+    }, 12 * 60 * 60 * 1000);
 
     return () => {
-      updateSW?.() // Clean up function
-    }
-  }, [])
-
-  const close = () => {
-    setOfflineReady(false)
-    setNeedRefresh(false)
-  }
+      updateSW?.();
+      clearTimeout(forceReloadTimeout);
+    };
+  }, []);
 
   const reloadApp = () => {
     if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' })
-      setNeedRefresh(false)
-      window.location.reload()
+      // Skip waiting and reload immediately
+      navigator.serviceWorker.controller.postMessage({ type: "SKIP_WAITING" });
+      window.location.reload();
     }
-  }
+  };
 
   return (
-    <div className="PWABadge" role="alert">
-      {(offlineReady || needRefresh) && (
-        <div className="PWABadge-toast">
-          <div className="PWABadge-message">
-            {offlineReady ? (
-              <span>App ready to work offline</span>
-            ) : (
-              <span>New content available. Click the reload button to update.</span>
-            )}
-          </div>
-          <div className="PWABadge-buttons">
-            {needRefresh && (
-              <button className="PWABadge-toast-button" onClick={reloadApp}>
-                Reload
-              </button>
-            )}
-            <button className="PWABadge-toast-button" onClick={close}>
-              Close
-            </button>
-          </div>
+    <div className="fixed bottom-4 right-4 z-50">
+      {needRefresh && (
+        <div className="bg-white shadow-lg rounded-lg p-4 flex items-center gap-3">
+          <span className="text-sm">New version available!</span>
+          <button
+            onClick={reloadApp}
+            className="bg-blue-500 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-600"
+          >
+            Update Now
+          </button>
         </div>
       )}
     </div>
-  )
+  );
 }
 
-export default PWABadge
+export default PWABadge;

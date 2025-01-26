@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useCart } from "../contexts/CartContext";
-import { UserOrder, OrderStatus, Order } from "../types/order";
+import { OrderStatus, Order } from "../types/order";
 
 import { ShoppingCart, Clock, CheckCircle, Trash2 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -9,7 +9,6 @@ import BottomNav from "../components/BottomNav";
 import { realtimeService } from "../services/realtimeService";
 import OrderConfirmationModal from "../components/OrderConfirmationModal";
 import { Timestamp } from "firebase/firestore";
-import { toast } from "react-hot-toast";
 
 export default function UserOrders() {
   const { user } = useAuth();

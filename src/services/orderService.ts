@@ -21,11 +21,8 @@ import {
   Address,
   PaymentStatus,
   UserOrder,
-  OrderNotification,
   OrderItem,
 } from "../types/order";
-import { notificationService } from "./notificationService";
-import { riderAssignmentService } from "./riderAssignmentService";
 
 export const orderService = {
   async getOrders(
@@ -39,7 +36,7 @@ export const orderService = {
       const constraints: QueryConstraint[] = [
         where("restaurantId", "==", restaurantId),
         where("status", "in", statuses),
-        orderBy("createdAt", "desc"),
+        orderBy("createdAt", "asc"),
       ];
 
       // Add date filter if startDate is provided
@@ -101,7 +98,7 @@ export const orderService = {
       ordersRef,
       where("restaurantId", "==", restaurantId),
       where("status", "in", ["pending", "accepted", "ready", "delivered"]),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "asc")
     );
 
     return onSnapshot(q, (snapshot) => {
@@ -138,7 +135,7 @@ export const orderService = {
       const q = query(
         ordersRef,
         where("customerId", "==", userId),
-        orderBy("createdAt", "desc")
+        orderBy("createdAt", "asc")
       );
 
       const snapshot = await getDocs(q);
@@ -166,7 +163,7 @@ export const orderService = {
         where("restaurantId", "==", restaurantId),
         where("status", "==", "delivered"),
         where("createdAt", ">=", today.toISOString()),
-        orderBy("createdAt", "desc")
+        orderBy("createdAt", "asc")
       );
 
       // Get pending orders
@@ -181,7 +178,7 @@ export const orderService = {
         ordersRef,
         where("restaurantId", "==", restaurantId),
         where("status", "==", "delivered"),
-        orderBy("createdAt", "desc"),
+        orderBy("createdAt", "asc"),
         limit(50)
       );
 
@@ -299,12 +296,12 @@ export const orderService = {
         "picked_up",
         "assigned",
       ]),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "asc")
     );
 
     return onSnapshot(q, async (snapshot) => {
-      const ordersPromises = snapshot.docs.map(async (doc) => {
-        const orderData = doc.data();
+      const ordersPromises = snapshot.docs.map(async (docSnapshot) => {
+        const orderData = docSnapshot.data();
         // Get restaurant details
         const restaurantRef = doc(db, "restaurants", orderData.restaurantId);
         const restaurantSnap = await getDoc(restaurantRef);
@@ -312,7 +309,7 @@ export const orderService = {
 
         return {
           ...orderData,
-          id: doc.id,
+          id: docSnapshot.id,
           restaurantName: restaurantData?.name || "Unknown Restaurant",
           restaurantAddress: restaurantData?.address || {
             street: "",
@@ -345,7 +342,7 @@ export const orderService = {
     const q = query(
       ordersRef,
       where("customerId", "==", userId),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "asc")
     );
 
     return onSnapshot(q, (snapshot) => {

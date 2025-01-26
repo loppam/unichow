@@ -114,6 +114,20 @@ export default function RiderPaymentSetup() {
   if (existingPaymentInfo?.isVerified) {
     return (
       <div className="bg-white rounded-lg shadow-sm p-6">
+        {existingPaymentInfo?.paystackSubaccountCode && (
+          <div className="mt-6">
+            <SubaccountBalance
+              subaccountCode={existingPaymentInfo.paystackSubaccountCode}
+              autoRefreshInterval={300000}
+            />
+          </div>
+        )}
+        <div className="flex justify-between items-center py-2">
+          <span className="text-gray-600">Last Updated</span>
+          <span className="text-sm text-gray-500">
+            {new Date(existingPaymentInfo.lastUpdated).toLocaleDateString()}
+          </span>
+        </div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Payment Information</h2>
           <button
@@ -148,21 +162,7 @@ export default function RiderPaymentSetup() {
               {existingPaymentInfo.settlementSchedule}
             </span>
           </div>
-          <div className="flex justify-between items-center py-2">
-            <span className="text-gray-600">Last Updated</span>
-            <span className="text-sm text-gray-500">
-              {new Date(existingPaymentInfo.lastUpdated).toLocaleDateString()}
-            </span>
-          </div>
         </div>
-        {existingPaymentInfo?.paystackSubaccountCode && (
-          <div className="mt-6">
-            <SubaccountBalance
-              subaccountCode={existingPaymentInfo.paystackSubaccountCode}
-              autoRefreshInterval={300000}
-            />
-          </div>
-        )}
       </div>
     );
   }

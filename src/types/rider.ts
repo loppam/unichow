@@ -1,9 +1,4 @@
-export type RiderStatus =
-  | "approved"
-  | "pending"
-  | "rejected"
-  | "suspended"
-  | "offline";
+export type RiderStatus = "available" | "busy" | "offline";
 
 export interface Rider {
   vehicleType: string;

@@ -15,7 +15,6 @@ import {
   query,
   where,
   getDocs,
-  limit,
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
@@ -23,12 +22,10 @@ import { db } from "../firebase/config";
 import { adminSettingsService } from "../services/adminSettingsService";
 import { usePaystackPayment } from "react-paystack";
 import PaymentBreakdown from "../components/PaymentBreakdown";
-import { riderAssignmentService } from "../services/riderAssignmentService";
 import { walletService } from "../services/walletService";
 import WalletPaymentOption from "../components/WalletPaymentOption";
 import { Wallet } from "../types/wallet";
 import { Rider } from "../types/rider";
-import { PaystackProps } from "react-paystack/dist/types";
 
 interface DeliveryFormData {
   address: string;
@@ -290,7 +287,7 @@ export default function Cart() {
             order: confirmedOrderData,
           },
         });
-      }, 10000);
+      }, 3000);
 
       toast.success("Order placed successfully!");
     } catch (error) {

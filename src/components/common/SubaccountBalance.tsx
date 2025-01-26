@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { paystackService } from "../../services/paystackService";
+import { RefreshCw } from "lucide-react";
 
 interface SubaccountBalanceProps {
   subaccountCode: string;
@@ -46,9 +47,11 @@ export default function SubaccountBalance({
         <button
           onClick={fetchBalance}
           disabled={refreshing}
-          className="text-sm px-3 py-1 text-gray-600 hover:text-gray-900 border rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          className="text-sm px-3 py-1 text-gray-600 hover:text-gray-900 border rounded-lg hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2"
         >
-          {refreshing ? "Refreshing..." : "Refresh"}
+          <RefreshCw
+            className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+          />
         </button>
       </div>
       {error ? (

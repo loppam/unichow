@@ -3,8 +3,6 @@ import {
   collection,
   query,
   where,
-  orderBy,
-  limit,
   getDocs,
   doc,
   updateDoc,
@@ -13,9 +11,8 @@ import {
   serverTimestamp,
   arrayUnion,
 } from "firebase/firestore";
-import { notificationService } from "./notificationService";
 import { Rider } from "../types/rider";
-import { Order, OrderNotification } from "../types/order";
+import { Order } from "../types/order";
 
 const RIDER_IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 const ASSIGNMENT_TIMEOUT = 5 * 60 * 1000; // 5 minutes

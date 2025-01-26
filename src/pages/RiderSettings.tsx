@@ -6,6 +6,10 @@ import { Rider, RiderStatus } from "../types/rider";
 import RiderLayout from "../components/RiderLayout";
 import { notificationService } from "../services/notificationService";
 import PaymentSetup from "../components/rider/PaymentSetup";
+import { signOut } from "firebase/auth";
+import { auth } from "../firebase/config";
+import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 
 const LoadingSpinner = () => (
   <RiderLayout>
@@ -15,7 +19,13 @@ const LoadingSpinner = () => (
   </RiderLayout>
 );
 
-const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+const FormSection = ({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) => (
   <div className="bg-white rounded-lg shadow-sm p-6">
     <h2 className="text-lg font-semibold mb-4">{title}</h2>
     <div className="space-y-4">{children}</div>
@@ -26,13 +36,15 @@ type FormFieldProps = {
   label: string;
   name: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+  onChange: (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => void;
   type?: string;
   error?: string;
 } & (
-  | React.ComponentPropsWithoutRef<'input'>
-  | React.ComponentPropsWithoutRef<'select'>
-)
+  | React.ComponentPropsWithoutRef<"input">
+  | React.ComponentPropsWithoutRef<"select">
+);
 
 const FormField = ({
   label,
@@ -55,7 +67,7 @@ const FormField = ({
         className={`w-full p-2 border rounded-lg focus:ring-2 focus:ring-gray-200 focus:border-transparent ${
           error ? "border-red-500" : ""
         }`}
-        {...(props as React.ComponentPropsWithoutRef<'select'>)}
+        {...(props as React.ComponentPropsWithoutRef<"select">)}
       />
     ) : (
       <input
@@ -66,7 +78,7 @@ const FormField = ({
         className={`w-full p-2 border rounded-lg focus:ring-2 focus:ring-gray-200 focus:border-transparent ${
           error ? "border-red-500" : ""
         }`}
-        {...(props as React.ComponentPropsWithoutRef<'input'>)}
+        {...(props as React.ComponentPropsWithoutRef<"input">)}
       />
     )}
     {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
@@ -86,6 +98,7 @@ export default function RiderSettings() {
     status: "available" as RiderStatus,
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const navigate = useNavigate();
 
   useEffect(() => {
     const loadRiderData = async () => {
@@ -106,7 +119,7 @@ export default function RiderSettings() {
         }
       } catch (error) {
         console.error("Error loading rider data:", error);
-        notificationService.showError("Failed to load rider data");
+        toast.error("Failed to load rider data");
       } finally {
         setLoading(false);
       }
@@ -115,7 +128,9 @@ export default function RiderSettings() {
     loadRiderData();
   }, [user]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -140,11 +155,11 @@ export default function RiderSettings() {
         ...formData,
         updatedAt: new Date().toISOString(),
       });
-      notificationService.showSuccess("Settings updated successfully");
+      toast.success("Settings updated successfully");
       setFormErrors({});
     } catch (error) {
       console.error("Error updating settings:", error);
-      notificationService.showError("Failed to update settings");
+      toast.error("Failed to update settings");
     } finally {
       setSaving(false);
     }
@@ -152,13 +167,24 @@ export default function RiderSettings() {
 
   const validateForm = (data: typeof formData) => {
     const errors: Partial<Record<keyof typeof formData, string>> = {};
-    
+
     if (!data.name.trim()) errors.name = "Name is required";
     if (!data.phone.trim()) errors.phone = "Phone number is required";
     if (!data.vehicleType) errors.vehicleType = "Vehicle type is required";
-    if (!data.vehiclePlate.trim()) errors.vehiclePlate = "Vehicle plate is required";
-    
+    if (!data.vehiclePlate.trim())
+      errors.vehiclePlate = "Vehicle plate is required";
+
     return errors;
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate("/login");
+    } catch (error) {
+      console.error("Error signing out:", error);
+      toast.error("Failed to sign out");
+    }
   };
 
   if (loading) return <LoadingSpinner />;
@@ -169,6 +195,8 @@ export default function RiderSettings() {
         <h1 className="text-2xl font-bold mb-6">Settings</h1>
 
         <div className="space-y-6">
+          <PaymentSetup />
+
           <FormSection title="Profile Information">
             <FormField
               label="Full Name"
@@ -236,10 +264,18 @@ export default function RiderSettings() {
               {saving ? "Saving..." : "Save Changes"}
             </button>
           </form>
+        </div>
 
-          <PaymentSetup />
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full btn-secondary"
+          >
+            Log Out
+          </button>
         </div>
       </div>
     </RiderLayout>
   );
-} 
+}

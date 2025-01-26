@@ -6,10 +6,10 @@ import { orderService } from "../services/orderService";
 import { TrendingUp, ShoppingBag, Clock, DollarSign } from "lucide-react";
 import { Order, OrderStatus } from "../types/order";
 import { MenuItem } from "../types/menu";
-import { restaurantService } from '../services/restaurantService';
-import { RestaurantProfile } from '../types/restaurant';
-import { notificationService } from '../services/notificationService';
-import { toast } from 'react-hot-toast';
+import { restaurantService } from "../services/restaurantService";
+import { RestaurantProfile } from "../types/restaurant";
+import { notificationService } from "../services/notificationService";
+import { Timestamp } from "firebase/firestore";
 
 interface DashboardStats {
   totalOrders: number;
@@ -39,11 +39,16 @@ export default function RestaurantDashboard() {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 
-        const [restaurantProfile, completedOrders, pendingOrders] = await Promise.all([
-          restaurantService.getRestaurantProfile(user.uid),
-          orderService.getOrders(user.uid, ["ready", "delivered"] as OrderStatus[], todayStart),
-          orderService.getOrders(user.uid, ["pending"] as OrderStatus[])
-        ]);
+        const [restaurantProfile, completedOrders, pendingOrders] =
+          await Promise.all([
+            restaurantService.getRestaurantProfile(user.uid),
+            orderService.getOrders(
+              user.uid,
+              ["ready", "delivered"] as OrderStatus[],
+              todayStart
+            ),
+            orderService.getOrders(user.uid, ["pending"] as OrderStatus[]),
+          ]);
 
         const revenue = completedOrders.reduce(
           (sum, order) => sum + order.total,
@@ -54,7 +59,8 @@ export default function RestaurantDashboard() {
           totalOrders: completedOrders.length,
           pendingOrders: pendingOrders.length,
           todayRevenue: revenue,
-          averagePreparationTime: restaurantProfile?.averagePreparationTime || 25,
+          averagePreparationTime:
+            restaurantProfile?.averagePreparationTime || 25,
         });
 
         setRecentOrders(completedOrders.slice(0, 5));
@@ -106,7 +112,8 @@ export default function RestaurantDashboard() {
 
   useEffect(() => {
     if (user?.uid) {
-      restaurantService.getRestaurantProfile(user.uid)
+      restaurantService
+        .getRestaurantProfile(user.uid)
         .then(setProfile)
         .catch(console.error);
     }
@@ -115,7 +122,7 @@ export default function RestaurantDashboard() {
   useEffect(() => {
     const initializeNotifications = async () => {
       if (!user?.uid) return;
-      
+
       const token = await notificationService.initialize();
       if (token) {
         await notificationService.requestPermission(user.uid);
@@ -151,42 +158,6 @@ export default function RestaurantDashboard() {
       color: "bg-purple-500",
     },
   ];
-
-  function TestOrderNotification() {
-    const { user } = useAuth();
-    
-    const handleTest = async () => {
-      if (!user) return;
-      
-      try {
-        await notificationService.sendNewOrderNotification(user.uid, {
-          id: Date.now().toString(),
-          orderId: 'test-123',
-          message: 'New test order received!',
-          status: 'pending',
-          amount: 99.99,
-          customerName: 'Test Customer',
-          timestamp: new Date().toISOString(),
-          type: 'order',
-          read: false
-        });
-        
-        toast.success('Test notification sent!');
-      } catch (error) {
-        console.error('Test failed:', error);
-        toast.error('Failed to send test notification');
-      }
-    };
-
-    return (
-      <button
-        onClick={handleTest}
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        Test Order Notification
-      </button>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -237,9 +208,11 @@ export default function RestaurantDashboard() {
                     <div className="text-right">
                       <p className="font-medium">₦{order.total.toFixed(2)}</p>
                       <p className="text-sm text-gray-500">
-                        {typeof order.createdAt === 'string' 
+                        {typeof order.createdAt === "string"
                           ? new Date(order.createdAt).toLocaleTimeString()
-                          : (order.createdAt as any).toDate().toLocaleTimeString()}
+                          : (order.createdAt as Timestamp)
+                              .toDate()
+                              .toLocaleTimeString()}
                       </p>
                     </div>
                   </div>
@@ -270,7 +243,6 @@ export default function RestaurantDashboard() {
       </div>
 
       <RestaurantNavigation />
-      <TestOrderNotification />
     </div>
   );
 }

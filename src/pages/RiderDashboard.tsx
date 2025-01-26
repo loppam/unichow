@@ -4,14 +4,9 @@ import { Rider } from "../types/rider";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import RiderLayout from "../components/RiderLayout";
-import { 
-  Bike, 
-  Package, 
-  Star, 
-  Clock,
-  MapPin
-} from "lucide-react";
+import { Bike, Package, Star, Clock, MapPin } from "lucide-react";
 import { notificationService } from "../services/notificationService";
+import ActiveOrders from "../components/rider/ActiveOrders";
 
 interface RiderStats {
   totalDeliveries: number;
@@ -42,7 +37,7 @@ export default function RiderDashboard() {
         if (riderDoc.exists()) {
           const riderData = { id: riderDoc.id, ...riderDoc.data() } as Rider;
           setRider(riderData);
-          
+
           // Update stats based on rider data
           setStats({
             totalDeliveries: riderData.completedOrders || 0,
@@ -65,7 +60,7 @@ export default function RiderDashboard() {
   useEffect(() => {
     const initializeNotifications = async () => {
       if (!user?.uid) return;
-      
+
       const token = await notificationService.initialize();
       if (token) {
         await notificationService.requestPermission(user.uid);
@@ -119,14 +114,22 @@ export default function RiderDashboard() {
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold mb-2">Welcome, {rider?.name}</h1>
+              <h1 className="text-2xl font-bold mb-2">
+                Welcome, {rider?.name}
+              </h1>
               <div className="flex items-center gap-2">
-                <div className={`h-3 w-3 rounded-full ${
-                  rider?.status === 'available' ? 'bg-green-500' :
-                  rider?.status === 'busy' ? 'bg-yellow-500' :
-                  'bg-gray-500'
-                }`} />
-                <span className="text-gray-600 capitalize">{rider?.status}</span>
+                <div
+                  className={`h-3 w-3 rounded-full ${
+                    rider?.status === "available"
+                      ? "bg-green-500"
+                      : rider?.status === "busy"
+                      ? "bg-yellow-500"
+                      : "bg-gray-500"
+                  }`}
+                />
+                <span className="text-gray-600 capitalize">
+                  {rider?.status}
+                </span>
               </div>
             </div>
           </div>
@@ -135,10 +138,7 @@ export default function RiderDashboard() {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {statsCards.map((stat) => (
-            <div
-              key={stat.title}
-              className="bg-white rounded-lg shadow-sm p-6"
-            >
+            <div key={stat.title} className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 mb-1">{stat.title}</p>
@@ -152,6 +152,9 @@ export default function RiderDashboard() {
           ))}
         </div>
 
+        {/* Active Orders */}
+        <ActiveOrders riderId={user!.uid} />
+
         {/* Current Location */}
         {rider?.currentLocation && (
           <div className="bg-white rounded-lg shadow-sm p-6">
@@ -160,12 +163,12 @@ export default function RiderDashboard() {
               <h2 className="text-lg font-semibold">Current Location</h2>
             </div>
             <p className="text-gray-600">
-              Lat: {rider.currentLocation.latitude.toFixed(6)}, 
-              Long: {rider.currentLocation.longitude.toFixed(6)}
+              Lat: {rider.currentLocation.latitude.toFixed(6)}, Long:{" "}
+              {rider.currentLocation.longitude.toFixed(6)}
             </p>
           </div>
         )}
       </div>
     </RiderLayout>
   );
-} 
+}

@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import { Search, Filter, X } from "lucide-react";
-import { collection, query, getDocs, where, orderBy } from "firebase/firestore";
+import { collection, query, getDocs, where } from "firebase/firestore";
 import { db } from "../firebase/config";
 import BottomNav from "../components/BottomNav";
 import RestaurantCard from "../components/RestaurantCard";
+import { CUISINE_TYPES, CuisineType } from "../constants/cuisineTypes";
+import { useSearchParams, useNavigate } from "react-router-dom";
 
 interface Restaurant {
   id: string;
   restaurantName: string;
-  cuisine: string[];
+  cuisineTypes: CuisineType[]; // Changed from cuisine: string[]
   rating: number;
   deliveryTime: string;
   minOrder: number;
@@ -22,16 +24,28 @@ export default function Explore() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCuisine, setSelectedCuisine] = useState<string>("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [selectedCuisine, setSelectedCuisine] = useState<string>(
+    searchParams.get("cuisine") || ""
+  );
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<"rating" | "deliveryTime" | "minOrder">(
     "rating"
   );
 
-  const cuisineTypes = ["All", "Bakery", "Smoothies", "Pizza"];
+  const cuisineTypes = ["All", ...CUISINE_TYPES];
 
   useEffect(() => {
     loadRestaurants();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cuisineFilter = params.get("cuisine");
+    if (cuisineFilter) {
+      setSelectedCuisine(cuisineFilter);
+    }
   }, []);
 
   const loadRestaurants = async () => {
@@ -55,6 +69,11 @@ export default function Explore() {
     }
   };
 
+  const handleCuisineSelect = (cuisine: string) => {
+    setSelectedCuisine(cuisine);
+    setSearchParams(cuisine === "All" ? {} : { cuisine });
+  };
+
   const filteredRestaurants = restaurants
     .filter((restaurant) => {
       const matchesSearch =
@@ -64,11 +83,11 @@ export default function Explore() {
         restaurant.description
           ?.toLowerCase()
           .includes(searchTerm.toLowerCase());
-
       const matchesCuisine =
         !selectedCuisine ||
         selectedCuisine === "All" ||
-        restaurant.cuisine?.includes(selectedCuisine);
+        (restaurant.cuisineTypes &&
+          restaurant.cuisineTypes.includes(selectedCuisine as CuisineType));
 
       return matchesSearch && matchesCuisine;
     })
@@ -128,7 +147,7 @@ export default function Explore() {
                   {cuisineTypes.map((cuisine) => (
                     <button
                       key={cuisine}
-                      onClick={() => setSelectedCuisine(cuisine)}
+                      onClick={() => handleCuisineSelect(cuisine)}
                       className={`px-3 py-1 rounded-full text-sm ${
                         selectedCuisine === cuisine
                           ? "bg-black text-white"
@@ -171,8 +190,9 @@ export default function Explore() {
               <RestaurantCard
                 key={restaurant.id}
                 name={restaurant.restaurantName}
+                bannerImage={restaurant.image}
+                minimumOrder={restaurant.minOrder}
                 {...restaurant}
-                minOrder={`₦${restaurant.minOrder}`}
               />
             ))}
           </div>

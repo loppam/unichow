@@ -10,6 +10,8 @@ import {
   Timestamp,
   serverTimestamp,
   arrayUnion,
+  orderBy,
+  limit,
 } from "firebase/firestore";
 import { Rider } from "../types/rider";
 import { Order } from "../types/order";
@@ -25,30 +27,50 @@ export const riderAssignmentService = {
       if (!orderDoc.exists()) throw new Error("Order not found");
 
       const order = orderDoc.data() as Order;
-      console.log("Order status:", order.status); // Debug log
+      console.log("Order status:", order.status);
 
       // Query available riders
       const ridersRef = collection(db, "riders");
-      const q = query(ridersRef, where("isVerified", "==", true));
-
-      const ridersSnapshot = await getDocs(q);
-      console.log(
-        "Found riders:",
-        ridersSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          status: doc.data().status,
-          isVerified: doc.data().isVerified,
-        }))
+      const q = query(
+        ridersRef,
+        where("isVerified", "==", true),
+        where("status", "==", "available"),
+        orderBy("assignedOrders", "asc")
       );
 
+      const ridersSnapshot = await getDocs(q);
       if (ridersSnapshot.empty) {
-        console.log("No riders found at all");
+        console.log("No available riders found");
         return null;
       }
 
-      // Get the first available rider
-      const rider = ridersSnapshot.docs[0];
-      const riderId = rider.id;
+      // Get all riders with minimum number of orders
+      const riders = ridersSnapshot.docs;
+      const minOrders = riders[0].data().assignedOrders?.length || 0;
+      const ridersWithMinOrders = riders.filter(
+        (rider) => (rider.data().assignedOrders?.length || 0) === minOrders
+      );
+
+      // Randomly select one rider from those with minimum orders
+      const selectedRider =
+        ridersWithMinOrders[
+          Math.floor(Math.random() * ridersWithMinOrders.length)
+        ];
+      const riderId = selectedRider.id;
+
+      console.log(
+        "Found riders with min orders:",
+        ridersWithMinOrders.map((doc) => ({
+          id: doc.id,
+          assignedOrders: doc.data().assignedOrders?.length || 0,
+        }))
+      );
+
+      // Update rider's assigned orders
+      await updateDoc(doc(db, "riders", riderId), {
+        assignedOrders: arrayUnion(orderId),
+        lastActivity: serverTimestamp(),
+      });
 
       // Update order with rider assignment
       await updateDoc(orderRef, {
@@ -57,13 +79,7 @@ export const riderAssignmentService = {
         assignedAt: serverTimestamp(),
       });
 
-      // Update rider's assigned orders
-      await updateDoc(doc(db, "riders", riderId), {
-        assignedOrders: arrayUnion(orderId),
-        lastActivity: serverTimestamp(),
-      });
-
-      console.log("Successfully assigned rider:", riderId); // Debug log
+      console.log("Successfully assigned rider:", riderId);
       return riderId;
     } catch (error) {
       console.error("Error assigning rider:", error);

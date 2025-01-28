@@ -7,16 +7,20 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-// Initialize S3 client
+// Initialize S3 client with fallback pattern
 const s3Client = new S3Client({
-  region: process.env.VITE_AWS_REGION!,
+  region: process.env.VITE_AWS_REGION || process.env.AWS_REGION!,
   credentials: {
-    accessKeyId: process.env.VITE_AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.VITE_AWS_SECRET_ACCESS_KEY!,
+    accessKeyId:
+      process.env.VITE_AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey:
+      process.env.VITE_AWS_SECRET_ACCESS_KEY ||
+      process.env.AWS_SECRET_ACCESS_KEY!,
   },
 });
 
-const BUCKET_NAME = process.env.VITE_S3_BUCKET_NAME;
+const BUCKET_NAME =
+  process.env.VITE_S3_BUCKET_NAME || process.env.S3_BUCKET_NAME;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {

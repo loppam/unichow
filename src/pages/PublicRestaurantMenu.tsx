@@ -6,20 +6,8 @@ import { MenuItem, MenuCategory } from "../types/menu";
 import { Plus } from "lucide-react";
 import { useCart } from "../contexts/CartContext";
 import { toast } from "react-hot-toast";
-
-interface RestaurantData {
-  restaurantName: string;
-  description: string;
-  cuisineTypes: string[];
-  openingHours: string;
-  closingHours: string;
-  address: string;
-  phone: string;
-}
-
-interface CartItem extends MenuItem {
-  quantity: number;
-}
+import LoadingSpinner from "../components/common/LoadingSpinner";
+import { RestaurantData } from "../types/restaurant";
 
 export default function PublicRestaurantMenu() {
   const { id } = useParams();
@@ -110,10 +98,10 @@ export default function PublicRestaurantMenu() {
 
   const handleAddToCart = async (item: MenuItem) => {
     if (!restaurant) return;
-    
+
     try {
       setIsAddingToCart(true);
-      
+
       if (!selectedPackId) {
         const newPackId = createNewPack(id!, restaurant.restaurantName);
         await addToCart(
@@ -139,22 +127,18 @@ export default function PublicRestaurantMenu() {
           selectedPackId
         );
       }
-      
+
       toast.success(`Added ${item.name} to cart`);
     } catch (error) {
-      console.error('Failed to add item to cart:', error);
-      toast.error('Failed to add item to cart');
+      console.error("Failed to add item to cart:", error);
+      toast.error("Failed to add item to cart");
     } finally {
       setIsAddingToCart(false);
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error || !restaurant) {
@@ -185,7 +169,12 @@ export default function PublicRestaurantMenu() {
             ))}
           </div>
           <div className="text-sm text-gray-600">
-            <p>📍 {typeof restaurant.address === 'object' ? Object.values(restaurant.address).join('') : restaurant.address}</p>
+            <p>
+              📍{" "}
+              {typeof restaurant.address === "object"
+                ? Object.values(restaurant.address).join("")
+                : restaurant.address}
+            </p>
             <p>
               ⏰ {restaurant.openingHours} - {restaurant.closingHours}
             </p>
@@ -195,7 +184,7 @@ export default function PublicRestaurantMenu() {
       </div>
 
       {/* Pack Selection */}
-      {restaurantPacks.length > 1 && (
+      {restaurantPacks.length > 0 && (
         <div className="bg-white shadow-sm p-4 sticky top-0 z-20">
           <div className="max-w-4xl mx-auto">
             <label className="text-sm font-medium text-gray-700">
@@ -251,8 +240,8 @@ export default function PublicRestaurantMenu() {
       <div className="max-w-4xl mx-auto p-6">
         <div className="grid gap-4 md:grid-cols-2">
           {filteredMenuItems.map((item) => (
-            <div 
-              key={item.id} 
+            <div
+              key={item.id}
               className="bg-white p-4 rounded-lg shadow-sm"
               role="article"
               aria-label={`Menu item: ${item.name}`}
@@ -271,9 +260,10 @@ export default function PublicRestaurantMenu() {
                   onClick={() => handleAddToCart(item)}
                   disabled={isAddingToCart}
                   className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors
-                    ${isAddingToCart 
-                      ? 'bg-gray-400 cursor-not-allowed' 
-                      : 'bg-black text-white hover:bg-gray-800'
+                    ${
+                      isAddingToCart
+                        ? "bg-gray-400 cursor-not-allowed"
+                        : "bg-black text-white hover:bg-gray-800"
                     }`}
                   aria-label={`Add ${item.name} to cart`}
                 >

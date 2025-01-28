@@ -97,7 +97,13 @@ export const orderService = {
     const q = query(
       ordersRef,
       where("restaurantId", "==", restaurantId),
-      where("status", "in", ["pending", "accepted", "ready", "delivered"]),
+      where("status", "in", [
+        "pending",
+        "accepted",
+        "preparing",
+        "ready",
+        "delivered",
+      ]),
       orderBy("createdAt", "asc")
     );
 
@@ -289,13 +295,8 @@ export const orderService = {
     // Query for orders that are either assigned to this rider or ready for pickup
     const q = query(
       ordersRef,
-      where("status", "in", [
-        "ready",
-        "accepted",
-        "preparing",
-        "picked_up",
-        "assigned",
-      ]),
+      where("riderId", "==", riderId),
+      where("status", "in", ["assigned", "preparing", "ready", "picked_up"]),
       orderBy("createdAt", "asc")
     );
 

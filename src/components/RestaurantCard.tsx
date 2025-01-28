@@ -1,11 +1,12 @@
-
 import { Link } from "react-router-dom";
 import { Star } from "lucide-react";
+import { useEffect, useState } from "react";
+import { s3Service } from "../services/s3Service";
 
 interface RestaurantCardProps {
   id: string;
   name: string;
-  image: string;
+  bannerImage: string;
   rating: number;
   deliveryTime: string;
   minimumOrder: number;
@@ -14,16 +15,34 @@ interface RestaurantCardProps {
 export default function RestaurantCard({
   id,
   name,
-  image,
+  bannerImage,
   rating,
   deliveryTime,
   minimumOrder,
 }: RestaurantCardProps) {
+  const [signedImageUrl, setSignedImageUrl] = useState<string>(bannerImage);
+
+  useEffect(() => {
+    const getSignedUrl = async () => {
+      if (bannerImage && !bannerImage.startsWith("http")) {
+        try {
+          const url = await s3Service.getSignedUrl(bannerImage);
+          setSignedImageUrl(url);
+        } catch (error) {
+          console.error("Error getting signed URL:", error);
+          setSignedImageUrl("/default-restaurant.jpeg");
+        }
+      }
+    };
+
+    getSignedUrl();
+  }, [bannerImage]);
+
   return (
     <Link to={`/restaurant/${id}`} className="block">
       <div className="rounded-lg overflow-hidden shadow-md bg-white">
         <img
-          src={image || "/default-restaurant.jpeg"}
+          src={signedImageUrl || "/default-restaurant.jpeg"}
           alt={name}
           className="w-full h-48 object-cover"
           onError={(e) => {

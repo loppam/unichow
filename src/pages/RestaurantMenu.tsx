@@ -27,7 +27,7 @@ export default function RestaurantMenu() {
 
   useEffect(() => {
     if (!user?.uid) return;
-    
+
     const unsubscribe = realtimeService.subscribeToMenu(
       user.uid,
       (updatedItems) => {

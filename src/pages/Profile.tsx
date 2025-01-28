@@ -7,6 +7,7 @@ import { LogOut, User as UserIcon, Edit2, Check, X } from "lucide-react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import BottomNav from "../components/BottomNav";
 import WalletSection from "../components/user/WalletSection";
+import LoadingButton from "../components/LoadingButton";
 
 interface UserDetails {
   firstName: string;
@@ -109,13 +110,9 @@ export default function Profile() {
           </button>
         ) : (
           <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="text-green-600 hover:text-green-700"
-            >
-              <Check className="w-5 h-5" />
-            </button>
+            <LoadingButton isLoading={saving} onClick={handleSave}>
+              Save Changes
+            </LoadingButton>
             <button
               onClick={handleCancel}
               disabled={saving}

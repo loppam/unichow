@@ -15,6 +15,7 @@ import { Coffee, UtensilsCrossed, IceCream2 } from "lucide-react";
 import { CUISINE_TYPES } from "../constants/cuisineTypes";
 import { CuisineType } from "../constants/cuisineTypes";
 import { LOCATIONS } from "../constants/locations";
+import LoadingButton from "../components/LoadingButton";
 
 const getIconForCuisine = (cuisine: CuisineType) => {
   switch (cuisine) {
@@ -45,6 +46,7 @@ export default function Home() {
     location: "",
   });
   const navigate = useNavigate();
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const fetchAddresses = async () => {
@@ -106,6 +108,8 @@ export default function Home() {
       return;
     }
 
+    setIsSaving(true);
+
     try {
       const formattedAddress = {
         address: `${newAddress.hostelName}(${newAddress.location})`,
@@ -122,6 +126,8 @@ export default function Home() {
     } catch (error) {
       console.error("Error saving address:", error);
       toast.error("Failed to save address");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -238,12 +244,12 @@ export default function Home() {
                     </option>
                   ))}
                 </select>
-                <button
+                <LoadingButton
+                  isLoading={isSaving}
                   onClick={handleSaveNewAddress}
-                  className="w-full py-3 bg-black text-white rounded-lg hover:bg-gray-900"
                 >
                   Save Address
-                </button>
+                </LoadingButton>
               </div>
             </div>
           </div>

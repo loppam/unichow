@@ -5,56 +5,21 @@ import { useAuth } from "../contexts/AuthContext";
 import RestaurantNavigation from "../components/RestaurantNavigation";
 import { signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import PaymentSetup from '../components/restaurant/PaymentSetup';
-import ProfileDetails from '../components/restaurant/settings/ProfileDetails';
-import BusinessHours from '../components/restaurant/settings/BusinessHours';
-import DeliverySettings from '../components/restaurant/settings/DeliverySettings';
-import { ChevronDown } from 'lucide-react';
-
-interface RestaurantData {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  restaurantName: string;
-  description: string;
-  cuisine: string[];
-  address: {
-    address: string;
-    additionalInstructions: string;
-  };
-  minimumOrder: number;
-  openingHours: string;
-  closingHours: string;
-  logo?: string;
-  bannerImage?: string;
-  profileComplete: boolean;
-  status: 'pending' | 'approved' | 'rejected' | 'suspended';
-  isApproved: boolean;
-  rating: number;
-  totalOrders: number;
-  createdAt: string;
-  updatedAt: string;
-  lastUpdated?: string;
-  paystackSubaccountCode: string;
-  paymentInfo?: {
-    bankName: string;
-    accountNumber: string;
-    accountName: string;
-    paystackSubaccountCode?: string;
-    paystackRecipientCode?: string;
-    settlementSchedule: 'daily' | 'weekly' | 'monthly';
-    isVerified: boolean;
-    lastUpdated: string;
-  };
-}
+import PaymentSetup from "../components/restaurant/PaymentSetup";
+import ProfileDetails from "../components/restaurant/settings/ProfileDetails";
+import BusinessHours from "../components/restaurant/settings/BusinessHours";
+import DeliverySettings from "../components/restaurant/settings/DeliverySettings";
+import { ChevronDown } from "lucide-react";
+import SubaccountBalance from "../components/common/SubaccountBalance";
+import { RestaurantData } from "../types/restaurant";
 
 export default function RestaurantSettings() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [restaurantData, setRestaurantData] = useState<RestaurantData | null>(null);
+  const [restaurantData, setRestaurantData] = useState<RestaurantData | null>(
+    null
+  );
   const [error, setError] = useState("");
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
@@ -83,7 +48,7 @@ export default function RestaurantSettings() {
   const handleSignOut = async () => {
     try {
       await signOut(auth);
-      navigate('/login');
+      navigate("/login");
     } catch (error) {
       console.error("Error signing out:", error);
       setError("Failed to sign out");
@@ -101,7 +66,9 @@ export default function RestaurantSettings() {
         <div className="flex items-center justify-center h-[calc(100vh-64px)]">
           {loading && <div className="text-gray-500">Loading settings...</div>}
           {error && <div className="text-red-500">{error}</div>}
-          {!restaurantData && <div className="text-gray-500">No restaurant data found</div>}
+          {!restaurantData && (
+            <div className="text-gray-500">No restaurant data found</div>
+          )}
         </div>
       </div>
     );
@@ -109,37 +76,44 @@ export default function RestaurantSettings() {
 
   const sections = [
     {
-      id: 'profile',
-      title: 'Profile Details',
-      component: <ProfileDetails data={restaurantData} />
+      id: "profile",
+      title: "Profile Details",
+      component: <ProfileDetails data={restaurantData} />,
     },
     {
-      id: 'hours',
-      title: 'Business Hours',
-      component: <BusinessHours data={restaurantData} />
+      id: "hours",
+      title: "Business Hours",
+      component: <BusinessHours data={restaurantData} />,
     },
     {
-      id: 'payment',
-      title: 'Payment Settings',
-      component: <PaymentSetup data={restaurantData} />
+      id: "payment",
+      title: "Payment Settings",
+      component: <PaymentSetup data={restaurantData} />,
     },
     {
-      id: 'delivery',
-      title: 'Delivery Settings',
-      component: <DeliverySettings data={restaurantData} />
-    }
+      id: "delivery",
+      title: "Delivery Settings",
+      component: <DeliverySettings data={restaurantData} />,
+    },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50">
       <RestaurantNavigation />
-      
+
       <div className="max-w-4xl mx-auto py-6 space-y-4 px-4 pb-20">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         </div>
-
-        {sections.map(section => (
+        {restaurantData.paymentInfo?.paystackSubaccountCode && (
+          <div className="mb-6">
+            <SubaccountBalance
+              subaccountCode={restaurantData.paymentInfo.paystackSubaccountCode}
+              autoRefreshInterval={300000}
+            />
+          </div>
+        )}
+        {sections.map((section) => (
           <div key={section.id} className="bg-white rounded-lg shadow">
             <button
               onClick={() => toggleSection(section.id)}
@@ -148,13 +122,13 @@ export default function RestaurantSettings() {
               <h2 className="text-xl font-semibold">{section.title}</h2>
               <ChevronDown
                 className={`transform transition-transform ${
-                  activeSection === section.id ? 'rotate-180' : ''
+                  activeSection === section.id ? "rotate-180" : ""
                 }`}
               />
             </button>
             <div
               className={`transition-all duration-200 ease-in-out overflow-hidden ${
-                activeSection === section.id ? 'max-h-[1000px]' : 'max-h-0'
+                activeSection === section.id ? "max-h-[1000px]" : "max-h-0"
               }`}
             >
               {section.component}
@@ -174,4 +148,4 @@ export default function RestaurantSettings() {
       </div>
     </div>
   );
-} 
+}

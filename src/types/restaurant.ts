@@ -1,12 +1,17 @@
-import { Address } from './order';
+import { Address } from "./order";
+import { CuisineType } from "../constants/cuisineTypes";
 
-export type RestaurantStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
+export type RestaurantStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "suspended";
 
 export interface RestaurantProfile {
   id: string;
   restaurantName: string;
   description: string;
-  cuisine: string[];
+  cuisineTypes: CuisineType[];
   address: Address;
   phone: string;
   email: string;
@@ -23,8 +28,19 @@ export interface RestaurantProfile {
   createdAt: string;
   updatedAt: string;
   lastUpdated?: string;
-  paystackSubaccountCode: string;
+  paymentInfo?: PaymentInfo;
   averagePreparationTime?: number;
+}
+
+export interface PaymentInfo {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  paystackSubaccountCode: string;
+  paystackRecipientCode?: string;
+  settlementSchedule: "daily" | "weekly" | "monthly";
+  isVerified: boolean;
+  lastUpdated: string;
 }
 
 export interface RestaurantRegistrationData {
@@ -35,7 +51,7 @@ export interface RestaurantRegistrationData {
   address: Address;
   logo?: File;
   description?: string;
-  cuisine?: string[];
+  cuisineTypes?: string[];
   openingHours?: string;
   closingHours?: string;
   minimumOrder: number;
@@ -45,7 +61,7 @@ export interface RestaurantRegistrationData {
 export interface RestaurantUpdateData {
   restaurantName?: string;
   description?: string;
-  cuisine?: string[];
+  cuisineTypes?: string[];
   address?: Address;
   phone?: string;
   openingHours?: string;
@@ -84,21 +100,8 @@ export interface BankDetails {
   percentage_charge: number;
 }
 
-export interface RestaurantPaymentInfo {
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
-  paystackSubaccountCode?: string;
-  paystackRecipientCode?: string;
-  settlementSchedule: 'daily' | 'weekly' | 'monthly';
-  isVerified: boolean;
-  lastUpdated: string;
-}
-
-export interface Restaurant extends RestaurantProfile {
-  paymentInfo?: RestaurantPaymentInfo;
-}
-
 export interface RestaurantData extends RestaurantProfile {
-  paymentInfo?: RestaurantPaymentInfo;
-} 
+  firstName: string;
+  lastName: string;
+  paymentInfo?: PaymentInfo;
+}

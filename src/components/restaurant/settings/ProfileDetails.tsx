@@ -5,6 +5,8 @@ import { useAuth } from "../../../contexts/AuthContext";
 import { toast } from "react-hot-toast";
 import { restaurantService } from "../../../services/restaurantService";
 import SubaccountBalance from "../../common/SubaccountBalance";
+import ImageUpload from "../../common/ImageUpload";
+import { CUISINE_TYPES, CuisineType } from "../../../constants/cuisineTypes";
 
 interface ProfileDetailsProps {
   data: {
@@ -14,7 +16,7 @@ interface ProfileDetailsProps {
     phone: string;
     restaurantName: string;
     description: string;
-    cuisineTypes: string[];
+    cuisineTypes: CuisineType[];
     address: {
       address: string;
       additionalInstructions: string;
@@ -27,8 +29,6 @@ interface ProfileDetailsProps {
     };
   };
 }
-
-const CUISINE_TYPES = ["Fast Food", "Pastries", "Smoothies"];
 
 export default function ProfileDetails({ data }: ProfileDetailsProps) {
   const { user } = useAuth();
@@ -45,9 +45,9 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
     cuisineTypes: data?.cuisineTypes || [],
     address: data?.address || { address: "", additionalInstructions: "" },
     minimumOrder: data?.minimumOrder || 0,
-    logo: data?.logo || "",
     bannerImage: data?.bannerImage || "",
   });
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
 
   const handleChange = (
     e: React.ChangeEvent<
@@ -80,34 +80,41 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
 
     try {
       setSaving(true);
-
-      // First sync the address update
       await restaurantService.syncAddressUpdate(user.uid, formData.address);
 
-      // Create a batch to update both collections
+      const updates = { ...formData };
+
+      if (bannerFile) {
+        const bannerUrl = await restaurantService.uploadFile(
+          user.uid,
+          bannerFile,
+          "banner"
+        );
+        updates.bannerImage = bannerUrl;
+      }
+
       const batch = writeBatch(db);
       const restaurantRef = doc(db, "restaurants", user.uid);
       const userRef = doc(db, "users", user.uid);
       const timestamp = new Date().toISOString();
 
-      // Updates for restaurant collection
       const restaurantUpdates = {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        phone: formData.phone,
-        restaurantName: formData.restaurantName,
-        description: formData.description,
-        cuisineTypes: formData.cuisineTypes,
-        minimumOrder: Number(formData.minimumOrder),
+        firstName: updates.firstName,
+        lastName: updates.lastName,
+        phone: updates.phone,
+        restaurantName: updates.restaurantName,
+        description: updates.description,
+        cuisineTypes: updates.cuisineTypes,
+        minimumOrder: Number(updates.minimumOrder),
+        bannerImage: updates.bannerImage,
         lastUpdated: timestamp,
       };
 
-      // Updates for user collection - sync relevant fields
       const userUpdates = {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        phone: formData.phone,
-        restaurantName: formData.restaurantName,
+        firstName: updates.firstName,
+        lastName: updates.lastName,
+        phone: updates.phone,
+        restaurantName: updates.restaurantName,
         lastUpdated: timestamp,
       };
 
@@ -115,7 +122,7 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
       batch.update(userRef, userUpdates);
 
       await batch.commit();
-
+      setBannerFile(null);
       toast.success("Profile details updated successfully");
     } catch (error) {
       console.error("Error updating profile details:", error);
@@ -163,14 +170,6 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
             />
           </div>
         </div>
-        {data.paymentInfo?.paystackSubaccountCode && (
-          <div className="mb-6">
-            <SubaccountBalance
-              subaccountCode={data.paymentInfo.paystackSubaccountCode}
-              autoRefreshInterval={300000}
-            />
-          </div>
-        )}
       </div>
 
       {/* Company Details Section */}
@@ -193,29 +192,73 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
             />
           </div>
 
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows={3}
-              className="w-full p-2 border rounded-lg"
-              required
-            />
+          <div>
+            {" "}
+            {/* Description and Address column */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                rows={2}
+                placeholder="Tell customers about your restaurant..."
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent resize-none"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Address
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  name="address"
+                  value={formData.address.address}
+                  onChange={handleAddressChange}
+                  placeholder="Enter your restaurant's address"
+                  className="w-full p-3 border rounded-lg pr-10 focus:ring-2 focus:ring-black focus:border-transparent"
+                  required
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <svg
+                    className="h-5 w-5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div>
+            {" "}
+            {/* Cuisine Types column */}
+            <label className="block text-sm font-medium text-gray-700 ">
               Cuisine Types
             </label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-2 border rounded-lg">
+            <div className="grid grid-cols-2 gap-2 p-2 border rounded-lg bg-gray-50">
               {CUISINE_TYPES.map((cuisine) => (
                 <label
                   key={cuisine}
-                  className="flex items-center space-x-2 cursor-pointer"
+                  className="flex items-center space-x-2 p-1.5 bg-white rounded-md shadow-sm hover:shadow-md transition-shadow cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -229,27 +272,32 @@ export default function ProfileDetails({ data }: ProfileDetailsProps) {
                         cuisineTypes: updatedCuisine,
                       }));
                     }}
-                    className="rounded border-gray-300 text-black focus:ring-black"
+                    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-black"
                   />
-                  <span className="text-sm text-gray-700">{cuisine}</span>
+                  <span className="text-sm text-gray-700 font-medium">
+                    {cuisine}
+                  </span>
                 </label>
               ))}
             </div>
+            {formData.cuisineTypes.length === 0 && (
+              <p className="mt-2 text-sm text-red-500">
+                Please select at least one cuisine type
+              </p>
+            )}
           </div>
-          <div className="grid md:grid-cols-1 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Address
-              </label>
-              <input
-                type="text"
-                name="address"
-                value={formData.address.address}
-                onChange={handleAddressChange}
-                className="w-full p-2 border rounded-lg mb-2"
-                required
-              />
-            </div>
+
+          <div className="md:col-span-2">
+            <ImageUpload
+              label="Restaurant Banner Image"
+              currentImage={formData.bannerImage}
+              onImageSelect={(file) => setBannerFile(file)}
+              onImageRemove={() => {
+                setFormData((prev) => ({ ...prev, bannerImage: "" }));
+                setBannerFile(null);
+              }}
+              className="h-32"
+            />
           </div>
         </div>
       </div>

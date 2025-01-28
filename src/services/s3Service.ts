@@ -1,43 +1,36 @@
 import {
-  S3Client,
-
   DeleteObjectCommand,
   GetObjectCommand,
+  PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-
-
-const s3Client = new S3Client({
-  region: import.meta.env.VITE_AWS_REGION,
-  credentials: {
-    accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID,
-    secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY,
-  },
-});
+import { s3Client } from "../config/aws";
+import axios from "axios";
 
 const BUCKET_NAME = import.meta.env.VITE_S3_BUCKET_NAME;
 
+// Configure axios with the Vercel URL or fallback to local
+const API_URL = import.meta.env.VITE_VERCEL_URL || "http://localhost:3000";
+axios.defaults.baseURL = API_URL;
+
 export const s3Service = {
   async uploadImage(file: File, path: string): Promise<string> {
-    const base64 = await fileToBase64(file);
+    try {
+      // Convert file to base64
+      const base64 = await fileToBase64(file);
 
-    const response = await fetch("/api/upload", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+      // Send to API endpoint
+      const response = await axios.post("/api/upload", {
         file: base64,
-        path,
-      }),
-    });
+        path: path,
+      });
 
-    if (!response.ok) {
+      // Store just the path instead of the full signed URL
+      return path;
+    } catch (error) {
+      console.error("Upload error:", error);
       throw new Error("Failed to upload image");
     }
-
-    const data = await response.json();
-    return data.url;
   },
 
   async generateThumbnail(file: File): Promise<Blob> {

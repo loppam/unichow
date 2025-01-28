@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Minus, Plus, Trash2 } from "lucide-react";
+import { Minus, Plus, Trash2, MapPin, X } from "lucide-react";
 import BottomNav from "../components/BottomNav";
 import { CartItem, useCart } from "../contexts/CartContext";
 import { toast } from "react-hot-toast";
@@ -26,17 +26,9 @@ import { walletService } from "../services/walletService";
 import WalletPaymentOption from "../components/WalletPaymentOption";
 import { Wallet } from "../types/wallet";
 import { Rider } from "../types/rider";
-
-interface DeliveryFormData {
-  address: string;
-  additionalInstructions?: string;
-}
-
-interface DeliverySettings {
-  deliveryRadius: number;
-  freeDeliveryThreshold: number;
-  baseDeliveryFee: number;
-}
+import { useAddress } from "../contexts/AddressContext";
+import { LOCATIONS } from "../constants/locations";
+import { riderService } from "../services/riderService";
 
 interface PaystackResponse {
   reference: string;
@@ -79,19 +71,14 @@ export default function Cart() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { currentAddress, setCurrentAddress } = useAddress();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
-  const [deliveryAddress, setDeliveryAddress] = useState<DeliveryFormData>({
-    address: "",
-    additionalInstructions: "",
-  });
-  const [addressError, setAddressError] = useState("");
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
   const [deliverySettings, setDeliverySettings] = useState({
     freeDeliveryThreshold: 5000,
     baseDeliveryFee: 500,
   });
-  const [error, setError] = useState<string | null>(null);
   const [paymentStep, setPaymentStep] = useState<"cart" | "payment">("cart");
   const initializePayment = usePaystackPayment({
     publicKey: PAYSTACK_PUBLIC_KEY,
@@ -116,6 +103,11 @@ export default function Cart() {
   const [processing, setProcessing] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [newAddress, setNewAddress] = useState({
+    hostelName: "",
+    location: LOCATIONS[0],
+  });
 
   const calculatePackTotal = (items: CartItem[]) => {
     return items.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -161,12 +153,12 @@ export default function Cart() {
         setSavedAddresses(addresses);
 
         // If no delivery address is set yet, get the initial address
-        if (!deliveryAddress.address) {
+        if (!currentAddress.address) {
           const initialAddress = await customerService.getInitialAddress(
             user.uid
           );
           if (initialAddress) {
-            setDeliveryAddress(initialAddress);
+            setCurrentAddress(initialAddress);
           }
         }
       } catch (error) {
@@ -178,31 +170,9 @@ export default function Cart() {
     };
 
     loadAddresses();
-  }, [user]);
+  }, [user, currentAddress.address, setCurrentAddress]);
 
   // Handle saved address selection
-
-  // Handle saving new address
-  const handleSaveAddress = async () => {
-    if (!user) return;
-
-    // Validate address before saving
-    if (!deliveryAddress.address.trim()) {
-      toast.error("Please enter a delivery address before saving");
-      return;
-    }
-
-    try {
-      await customerService.saveAddress(user.uid, deliveryAddress);
-      const addresses = await customerService.getSavedAddresses(user.uid);
-      setSavedAddresses(addresses);
-      toast.success("Address saved successfully");
-    } catch (error) {
-      console.error("Error saving address:", error);
-      toast.error("Failed to save address");
-    }
-  };
-
   const handleAddNewPack = (restaurantId: string) => {
     if (packs.length > 0 && packs[0].restaurantId !== restaurantId) {
       alert(
@@ -242,8 +212,8 @@ export default function Cart() {
             : "Anonymous",
         customerPhone: userData?.phone || "",
         deliveryAddress: {
-          address: deliveryAddress.address,
-          additionalInstructions: deliveryAddress.additionalInstructions || "",
+          address: currentAddress.address,
+          additionalInstructions: currentAddress.additionalInstructions || "",
         },
         total: calculateTotal(),
         subtotal: calculateSubtotal(),
@@ -253,16 +223,30 @@ export default function Cart() {
         paymentMethod: "paystack",
         paymentStatus: "completed",
         paymentReference: paymentRef.reference,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        riderId: null,
+        assignedAt: null,
       };
 
       const orderId = await orderService.createOrder(user.uid, newOrder);
+
+      // Add rider assignment after order creation
+      try {
+        await riderService.assignRiderToOrder(orderId);
+      } catch (error) {
+        console.error("Failed to assign rider:", error);
+        // Don't block the order confirmation, just log the error
+      }
+
       clearCart();
 
       // Show confirmation modal with delivery code
       const confirmedOrderData = {
         ...newOrder,
         id: orderId,
-        customerAddress: deliveryAddress.address,
+        customerAddress: currentAddress.address,
         items: packs.flatMap((pack) => pack.items),
         status: "pending",
         createdAt: new Date().toISOString(),
@@ -302,14 +286,6 @@ export default function Cart() {
     setPaymentStep("cart");
   };
 
-  const validateAddress = () => {
-    if (!deliveryAddress.address.trim()) {
-      setError("Please enter a delivery address");
-      return false;
-    }
-    return true;
-  };
-
   const checkRiderAvailability = async () => {
     const ridersRef = collection(db, "riders");
     const q = query(
@@ -342,7 +318,7 @@ export default function Cart() {
       return;
     }
 
-    if (!deliveryAddress.address) {
+    if (!currentAddress.address) {
       toast.error("Please enter a delivery address");
       return;
     }
@@ -364,45 +340,6 @@ export default function Cart() {
       }
 
       await checkRiderAvailability();
-
-      // Create order with status "ready"
-      const newOrder = {
-        customerId: user.uid,
-        restaurantId: packs[0].restaurantId,
-        packs: packs.map((pack) => ({
-          id: pack.id,
-          restaurantName: pack.restaurantName,
-          items: pack.items.map((item) => ({
-            id: item.id,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            specialInstructions: item.specialInstructions || "",
-          })),
-        })),
-        customerName:
-          userData?.firstName || userData?.lastName
-            ? `${userData?.firstName || ""} ${userData?.lastName || ""}`
-            : "Anonymous",
-        customerPhone: userData?.phone || "",
-        deliveryAddress: {
-          address: deliveryAddress.address,
-          additionalInstructions: deliveryAddress.additionalInstructions || "",
-        },
-        total: calculateTotal(),
-        subtotal: calculateSubtotal(),
-        deliveryFee: calculateDeliveryFee(),
-        serviceFee: calculateServiceFee(),
-        deliveryConfirmationCode: generateDeliveryCode(),
-        status: "ready",
-        paymentMethod: "paystack",
-        paymentStatus: "pending",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      const orderId = await orderService.createOrder(user.uid, newOrder);
-
       // Initialize Paystack payment
       const config = getPaystackConfig(restaurantData!);
       initializePayment({
@@ -420,101 +357,70 @@ export default function Cart() {
     }
   };
 
-  const renderAddressForm = () => (
+  const renderAddressSection = () => (
     <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-      <h2 className="font-semibold mb-4">Delivery Address</h2>
-
-      {addressError && (
-        <div className="text-red-500 text-sm mb-4">{addressError}</div>
-      )}
-
-      <div className="space-y-4">
-        {savedAddresses.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Saved Addresses
-            </label>
-            <select
-              value={deliveryAddress.address}
-              onChange={(e) => {
-                const selected = savedAddresses.find(
-                  (addr) => addr.address === e.target.value
-                );
-                if (selected) {
-                  setDeliveryAddress(selected);
-                }
-              }}
-              className="w-full p-2 border rounded-md"
-            >
-              <option value="">
-                Select a saved address or enter new below
-              </option>
-              {savedAddresses.map((addr, index) => (
-                <option key={index} value={addr.address}>
-                  {addr.address}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Delivery Address *
-          </label>
-          <input
-            type="text"
-            value={deliveryAddress.address}
-            onChange={(e) =>
-              setDeliveryAddress((prev) => ({
-                ...prev,
-                address: e.target.value,
-              }))
-            }
-            className="w-full p-2 border rounded-md"
-            placeholder="Enter your delivery address"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Additional Instructions
-          </label>
-          <textarea
-            value={deliveryAddress.additionalInstructions}
-            onChange={(e) =>
-              setDeliveryAddress((prev) => ({
-                ...prev,
-                additionalInstructions: e.target.value,
-              }))
-            }
-            className="w-full p-2 border rounded-md"
-            placeholder="Apartment number, delivery instructions, etc."
-            rows={2}
-          />
-        </div>
-
-        {/* Save Address Checkbox */}
-        <div className="flex items-center mt-4">
-          <input
-            type="checkbox"
-            id="saveAddress"
-            className="rounded border-gray-300"
-            disabled={!deliveryAddress.address.trim()}
-            onChange={(e) => {
-              if (e.target.checked) {
-                handleSaveAddress();
-              }
-            }}
-          />
-          <label htmlFor="saveAddress" className="ml-2 text-sm text-gray-600">
-            Save this address for future orders
-          </label>
-        </div>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="font-semibold">Delivery Address</h2>
+        <button
+          onClick={() => setShowAddressModal(true)}
+          className="text-green-800 text-sm"
+        >
+          Change
+        </button>
       </div>
+
+      {currentAddress.address ? (
+        <div className="flex items-start space-x-3">
+          <MapPin className="w-5 h-5 mt-1" />
+          <div>
+            <p className="font-medium">{currentAddress.address}</p>
+            {currentAddress.additionalInstructions && (
+              <p className="text-sm text-gray-500">
+                {currentAddress.additionalInstructions}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowAddressModal(true)}
+          className="w-full p-3 border border-dashed rounded-lg text-gray-500"
+        >
+          Select delivery address
+        </button>
+      )}
     </div>
   );
+
+  const handleSaveNewAddress = async () => {
+    if (!user) {
+      toast.error("Please login to save address");
+      return;
+    }
+
+    if (!newAddress.hostelName.trim()) {
+      toast.error("Please enter a hostel/location name");
+      return;
+    }
+
+    try {
+      const formattedAddress = {
+        address: `${newAddress.hostelName}, ${newAddress.location}`,
+        additionalInstructions: "",
+      };
+
+      await customerService.saveAddress(user.uid, formattedAddress);
+      const addresses = await customerService.getSavedAddresses(user.uid);
+      setSavedAddresses(addresses);
+      setCurrentAddress(formattedAddress);
+      setShowAddressModal(false);
+      setNewAddress({ hostelName: "", location: LOCATIONS[0] });
+      toast.success("Address saved successfully");
+    } catch (error) {
+      console.error("Error saving address:", error);
+      toast.error("Failed to save address");
+    }
+  };
 
   // Move the fetchDeliverySettings to a separate function
   const fetchDeliverySettings = async () => {
@@ -542,7 +448,6 @@ export default function Cart() {
     }
 
     const total = calculateTotal();
-    const subtotal = calculateSubtotal();
     const deliveryFee = calculateDeliveryFee();
     const serviceFee = calculateServiceFee(); // 10% of subtotal
     const amount = Math.round(total * 100);
@@ -662,8 +567,8 @@ export default function Cart() {
             : "Anonymous",
         customerPhone: userData?.phone || "",
         deliveryAddress: {
-          address: deliveryAddress.address,
-          additionalInstructions: deliveryAddress.additionalInstructions || "",
+          address: currentAddress.address,
+          additionalInstructions: currentAddress.additionalInstructions || "",
         },
         total,
         subtotal: calculateSubtotal(),
@@ -672,6 +577,8 @@ export default function Cart() {
         deliveryConfirmationCode: generateDeliveryCode(),
         paymentMethod: "wallet",
         paymentStatus: "completed",
+        riderId: null,
+        assignedAt: null,
       };
 
       const orderId = await orderService.createOrder(user.uid, newOrder);
@@ -683,13 +590,20 @@ export default function Cart() {
         updatedAt: serverTimestamp(),
       });
 
+      // Add rider assignment after order creation
+      try {
+        await riderService.assignRiderToOrder(orderId);
+      } catch (error) {
+        console.error("Failed to assign rider:", error);
+      }
+
       clearCart();
 
       // Show confirmation modal with delivery code
       const confirmedOrderData = {
         ...newOrder,
         id: orderId,
-        customerAddress: deliveryAddress.address,
+        customerAddress: currentAddress.address,
         items: packs.flatMap((pack) => pack.items),
         status: "pending",
         createdAt: new Date().toISOString(),
@@ -809,7 +723,7 @@ export default function Cart() {
               </div>
             ))}
 
-            {renderAddressForm()}
+            {renderAddressSection()}
 
             <div className="bg-white rounded-lg shadow-sm p-4 space-y-2">
               <div className="flex justify-between">
@@ -838,7 +752,7 @@ export default function Cart() {
                     name="paymentMethod"
                     value="paystack"
                     checked={paymentMethod === "paystack"}
-                    onChange={(e) => setPaymentMethod("paystack")}
+                    onChange={() => setPaymentMethod("paystack")}
                     className="form-radio"
                   />
                   <span>Pay with Card</span>
@@ -850,7 +764,7 @@ export default function Cart() {
                     name="paymentMethod"
                     value="wallet"
                     checked={paymentMethod === "wallet"}
-                    onChange={(e) => setPaymentMethod("wallet")}
+                    onChange={() => setPaymentMethod("wallet")}
                     disabled={!wallet || wallet.balance < calculateTotal()}
                     className="form-radio"
                   />
@@ -949,6 +863,73 @@ export default function Cart() {
       </main>
 
       <BottomNav />
+
+      {/* Address Modal */}
+      {showAddressModal && (
+        <div className="fixed inset-0 bg-black/50 z-50">
+          <div className="bg-white rounded-t-xl fixed bottom-0 left-0 right-0 max-h-[90vh] overflow-auto">
+            <div className="p-4 border-b sticky top-0 bg-white">
+              <div className="flex justify-between items-center">
+                <h3 className="font-semibold text-lg">Delivery Address</h3>
+                <button onClick={() => setShowAddressModal(false)}>
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {savedAddresses.map((address, index) => (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setCurrentAddress(address);
+                    setShowAddressModal(false);
+                  }}
+                  className="w-full p-4 text-left border rounded-lg flex items-start space-x-3 hover:bg-gray-50"
+                >
+                  <MapPin className="w-5 h-5 mt-1" />
+                  <span className="font-medium">{address.address}</span>
+                </button>
+              ))}
+
+              <div className="border-t pt-4 space-y-4">
+                <h4 className="font-medium">Add New Address</h4>
+                <input
+                  type="text"
+                  placeholder="Hostel/Location Name"
+                  value={newAddress.hostelName}
+                  onChange={(e) =>
+                    setNewAddress({ ...newAddress, hostelName: e.target.value })
+                  }
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+                />
+                <select
+                  value={newAddress.location}
+                  onChange={(e) =>
+                    setNewAddress({ ...newAddress, location: e.target.value })
+                  }
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+                >
+                  <option value="" disabled>
+                    Select Landmark
+                  </option>
+                  {LOCATIONS.map((location) => (
+                    <option key={location} value={location}>
+                      {location}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleSaveNewAddress}
+                  className="w-full py-3 bg-black text-white rounded-lg hover:bg-gray-900"
+                >
+                  Save Address
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

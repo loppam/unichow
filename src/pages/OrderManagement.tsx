@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { orderService } from '../services/orderService';
-import { Order, OrderStatus } from '../types/order';
-import OrderList from '../components/orders/OrderList';
-import OrderDetails from '../components/orders/OrderDetails';
-import { useOrderNotifications } from '../contexts/OrderNotificationContext';
-import RestaurantLayout from '../components/RestaurantLayout';
-import { Unsubscribe } from 'firebase/firestore';
+import { useState, useEffect } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { orderService } from "../services/orderService";
+import { Order, OrderStatus } from "../types/order";
+import OrderList from "../components/orders/OrderList";
+import OrderDetails from "../components/orders/OrderDetails";
+import { useOrderNotifications } from "../contexts/OrderNotificationContext";
+import RestaurantLayout from "../components/RestaurantLayout";
+import { Unsubscribe } from "firebase/firestore";
+import { riderAssignmentService } from "../services/riderAssignmentService";
+import { toast } from "react-hot-toast";
 
 export default function OrderManagement() {
   const { user } = useAuth();
@@ -14,18 +16,25 @@ export default function OrderManagement() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OrderStatus[]>(['pending', 'accepted', 'preparing']);
+  const [error, setError] = useState("");
+  const [statusFilter, setStatusFilter] = useState<OrderStatus[]>([
+    "pending",
+    "accepted",
+    "preparing",
+  ]);
 
   useEffect(() => {
     if (!user?.uid) return;
 
     const loadOrders = async () => {
       try {
-        const fetchedOrders = await orderService.getOrders(user.uid, statusFilter);
+        const fetchedOrders = await orderService.getOrders(
+          user.uid,
+          statusFilter
+        );
         setOrders(fetchedOrders);
       } catch (err) {
-        setError('Failed to load orders');
+        setError("Failed to load orders");
         console.error(err);
       } finally {
         setLoading(false);
@@ -37,13 +46,18 @@ export default function OrderManagement() {
     // Subscribe to new orders
     let unsubscribe: Unsubscribe;
     const setupSubscription = async () => {
-      unsubscribe = await orderService.subscribeToNewOrders(user.uid, (newOrders) => {
-        setOrders(prev => {
-          const existingIds = new Set(prev.map(o => o.id));
-          const uniqueNewOrders = newOrders.filter(o => !existingIds.has(o.id));
-          return [...uniqueNewOrders, ...prev];
-        });
-      });
+      unsubscribe = await orderService.subscribeToNewOrders(
+        user.uid,
+        (newOrders) => {
+          setOrders((prev) => {
+            const existingIds = new Set(prev.map((o) => o.id));
+            const uniqueNewOrders = newOrders.filter(
+              (o) => !existingIds.has(o.id)
+            );
+            return [...uniqueNewOrders, ...prev];
+          });
+        }
+      );
     };
 
     setupSubscription();
@@ -55,25 +69,59 @@ export default function OrderManagement() {
     };
   }, [user?.uid, statusFilter]);
 
-  const handleStatusUpdate = async (orderId: string, status: OrderStatus, estimatedTime?: number) => {
+  const handleStatusUpdate = async (orderId: string, status: OrderStatus) => {
     if (!user) return;
 
     try {
-      await orderService.updateOrderStatus(user.uid, orderId, status, estimatedTime);
-      
+      await orderService.updateOrderStatus(user.uid, orderId, status);
+
       // Update local state
-      setOrders(prev => prev.map(order => 
-        order.id === orderId
-          ? { ...order, status }
-          : order
-      ));
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId ? { ...order, status } : order
+        )
+      );
 
       if (selectedOrder?.id === orderId) {
-        setSelectedOrder(prev => prev ? { ...prev, status } : null);
+        setSelectedOrder((prev) => (prev ? { ...prev, status } : null));
       }
     } catch (err) {
-      console.error('Error updating order status:', err);
-      setError('Failed to update order status');
+      console.error("Error updating order status:", err);
+      setError("Failed to update order status");
+    }
+  };
+
+  const handleAcceptOrder = async (orderId: string) => {
+    if (!user) return;
+
+    try {
+      // First update order status to accepted
+      await orderService.updateOrderStatus(user.uid, orderId, "accepted");
+
+      // Then try to assign a rider immediately
+      const riderId = await riderAssignmentService.assignRiderToOrder(orderId);
+
+      // Update local state
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId
+            ? {
+                ...order,
+                status: "accepted",
+                riderId: riderId || undefined,
+              }
+            : order
+        )
+      );
+
+      if (riderId) {
+        toast.success("Order accepted and rider assigned");
+      } else {
+        toast.success("Order accepted. Searching for riders...");
+      }
+    } catch (err) {
+      console.error("Error accepting order:", err);
+      setError("Failed to accept order");
     }
   };
 
@@ -84,21 +132,30 @@ export default function OrderManagement() {
         <div className="w-1/3 border-r overflow-y-auto">
           <div className="p-4 border-b">
             <h2 className="text-xl font-semibold mb-4">Orders</h2>
-            
+
             {/* Status Filter */}
             <div className="flex flex-wrap gap-2">
-              {['pending', 'accepted', 'preparing', 'ready', 'delivered', 'cancelled'].map((status) => (
+              {[
+                "pending",
+                "accepted",
+                "preparing",
+                "ready",
+                "delivered",
+                "cancelled",
+              ].map((status) => (
                 <button
                   key={status}
-                  onClick={() => setStatusFilter(prev => 
-                    prev.includes(status as OrderStatus)
-                      ? prev.filter(s => s !== status)
-                      : [...prev, status as OrderStatus]
-                  )}
+                  onClick={() =>
+                    setStatusFilter((prev) =>
+                      prev.includes(status as OrderStatus)
+                        ? prev.filter((s) => s !== status)
+                        : [...prev, status as OrderStatus]
+                    )
+                  }
                   className={`px-3 py-1 rounded-full text-sm ${
                     statusFilter.includes(status as OrderStatus)
-                      ? 'bg-black text-white'
-                      : 'bg-gray-100 text-gray-600'
+                      ? "bg-black text-white"
+                      : "bg-gray-100 text-gray-600"
                   }`}
                 >
                   {status}
@@ -107,11 +164,7 @@ export default function OrderManagement() {
             </div>
           </div>
 
-          {error && (
-            <div className="p-4 bg-red-50 text-red-500">
-              {error}
-            </div>
-          )}
+          {error && <div className="p-4 bg-red-50 text-red-500">{error}</div>}
 
           {loading ? (
             <div className="flex justify-center items-center h-64">
@@ -121,7 +174,7 @@ export default function OrderManagement() {
             <OrderList
               orders={orders}
               selectedOrderId={selectedOrder?.id}
-              onSelectOrder={order => setSelectedOrder(order)}
+              onSelectOrder={(order) => setSelectedOrder(order)}
               onStatusUpdate={handleStatusUpdate}
             />
           )}
@@ -143,4 +196,4 @@ export default function OrderManagement() {
       </div>
     </RestaurantLayout>
   );
-} 
+}

@@ -3,33 +3,10 @@ import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { restaurantService } from "../services/restaurantService";
 import { toast } from "react-hot-toast";
-import { RestaurantStatus } from "../types/restaurant";
-import { Address } from "../types/order";
 import { getDoc, doc } from "firebase/firestore";
 import { db } from "../firebase/config";
-
-interface RestaurantProfile {
-  id: string;
-  restaurantName: string;
-  description: string;
-  cuisine: string[];
-  address: Address;
-  phone: string;
-  email: string;
-  openingHours: string;
-  closingHours: string;
-  minimumOrder: number;
-  profileComplete: boolean;
-  status: RestaurantStatus;
-  isApproved: boolean;
-  rating: number;
-  totalOrders: number;
-  logo?: string;
-  bannerImage?: string;
-  createdAt: string;
-  updatedAt: string;
-  lastUpdated?: string;
-}
+import { CUISINE_TYPES, CuisineType } from "../constants/cuisineTypes";
+import type { RestaurantProfile } from "../types/restaurant";
 
 export default function RestaurantProfile() {
   const { user } = useAuth();
@@ -40,7 +17,7 @@ export default function RestaurantProfile() {
     id: "",
     restaurantName: "",
     description: "",
-    cuisine: [],
+    cuisineTypes: [],
     address: {
       address: "",
       additionalInstructions: "",
@@ -104,6 +81,11 @@ export default function RestaurantProfile() {
       return;
     }
 
+    if (profile.cuisineTypes.length === 0) {
+      toast.error("Please select at least one cuisine type");
+      return;
+    }
+
     setSaving(true);
     const formElement = e.target as HTMLFormElement;
     const formData = new FormData(formElement);
@@ -142,6 +124,7 @@ export default function RestaurantProfile() {
           ...profile,
           restaurantName: formData.get("restaurantName") as string,
           description: formData.get("description") as string,
+          cuisineTypes: profile.cuisineTypes,
           phone: formData.get("phone") as string,
           openingHours: formData.get("openingHours") as string,
           closingHours: formData.get("closingHours") as string,
@@ -222,6 +205,15 @@ export default function RestaurantProfile() {
                   setProfile((p) => ({ ...p, description: value }))
                 }
                 required
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <CuisineSelect
+                selected={profile.cuisineTypes}
+                onChange={(values) =>
+                  setProfile((p) => ({ ...p, cuisineTypes: values }))
+                }
               />
             </div>
 
@@ -425,3 +417,60 @@ const FormActions = ({
     </button>
   </div>
 );
+
+const CuisineSelect = ({
+  selected,
+  onChange,
+}: {
+  selected: CuisineType[];
+  onChange: (values: CuisineType[]) => void;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Cuisine Types *
+      </label>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full p-2 border rounded-lg text-left flex justify-between items-center"
+      >
+        <span className="truncate">
+          {selected.length ? selected.join(", ") : "Select Cuisine Types"}
+        </span>
+        <span className="ml-2">▼</span>
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
+          {CUISINE_TYPES.map((cuisine) => (
+            <label
+              key={cuisine}
+              className="flex items-center p-3 hover:bg-gray-50 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(cuisine)}
+                onChange={(e) => {
+                  const newSelected = e.target.checked
+                    ? [...selected, cuisine]
+                    : selected.filter((item) => item !== cuisine);
+                  onChange(newSelected);
+                }}
+                className="mr-2"
+              />
+              {cuisine}
+            </label>
+          ))}
+        </div>
+      )}
+      {selected.length === 0 && (
+        <p className="text-sm text-red-500 mt-1">
+          Please select at least one cuisine type
+        </p>
+      )}
+    </div>
+  );
+};

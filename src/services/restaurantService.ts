@@ -16,6 +16,7 @@ import {
 import { paystackService } from "./paystackService";
 import { Address } from "../types/order";
 import { s3Service } from "./s3Service";
+import { isValidCuisineType } from "../constants/cuisineTypes";
 
 export const restaurantService = {
   async registerRestaurant(data: RestaurantRegistrationData): Promise<string> {
@@ -71,6 +72,18 @@ export const restaurantService = {
     files?: { logo?: File; banner?: File }
   ): Promise<void> {
     try {
+      // Validate cuisine types
+      if (data.cuisineTypes) {
+        const invalidCuisines = data.cuisineTypes.filter(
+          (cuisine) => !isValidCuisineType(cuisine)
+        );
+        if (invalidCuisines.length > 0) {
+          throw new Error(
+            `Invalid cuisine types: ${invalidCuisines.join(", ")}`
+          );
+        }
+      }
+
       // Handle address update separately if present
       if (data.address) {
         await this.syncAddressUpdate(restaurantId, data.address);

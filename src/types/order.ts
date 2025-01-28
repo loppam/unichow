@@ -1,10 +1,9 @@
-import { ReactNode } from "react";
-import { Timestamp, FieldValue } from "firebase/firestore";
+import { Timestamp } from "firebase/firestore";
 
 export interface Address {
   id?: string;
   address: string;
-  additionalInstructions?: string;
+  additionalInstructions: string;
 }
 
 export interface OrderItem {

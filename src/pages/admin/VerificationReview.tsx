@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { adminVerificationService } from '../../services/adminVerificationService';
-import { format } from 'date-fns';
-import { toast } from 'react-hot-toast';
-import { VerificationDocument } from '../../types/verification';
+import { useState, useEffect } from "react";
+import { adminVerificationService } from "../../services/adminVerificationService";
+import { format } from "date-fns";
+import { toast } from "react-hot-toast";
+import { VerificationDocument } from "../../types/verification";
 
 interface Verification {
   restaurantId: string;
@@ -12,7 +12,7 @@ interface Verification {
   address?: string;
   status: {
     isVerified: boolean;
-    state?: 'pending' | 'approved' | 'rejected';
+    state?: "pending" | "approved" | "rejected";
   };
   documents: VerificationDocument[];
 }
@@ -20,10 +20,13 @@ interface Verification {
 export default function VerificationReview() {
   const [verifications, setVerifications] = useState<Verification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedRestaurant, setSelectedRestaurant] = useState<Verification | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
+  const [selectedRestaurant, setSelectedRestaurant] =
+    useState<Verification | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
   const [reviewing, setReviewing] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'approved' | 'pending' | 'rejected'>('all');
+  const [filter, setFilter] = useState<
+    "all" | "approved" | "pending" | "rejected"
+  >("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,7 +38,7 @@ export default function VerificationReview() {
       const data = await adminVerificationService.getPendingVerifications();
       setVerifications(data);
     } catch (err) {
-      toast.error('Failed to load verifications');
+      toast.error("Failed to load verifications");
       console.error(err);
     } finally {
       setLoading(false);
@@ -45,7 +48,7 @@ export default function VerificationReview() {
   const handleReview = async (
     restaurantId: string,
     documentId: string,
-    status: 'approved' | 'rejected'
+    status: "approved" | "rejected"
   ) => {
     setReviewing(true);
     try {
@@ -53,51 +56,61 @@ export default function VerificationReview() {
         restaurantId,
         documentId,
         status,
-        status === 'rejected' ? rejectionReason : undefined
+        status === "rejected" ? rejectionReason : undefined
       );
-      
+
       await loadVerifications();
-      setRejectionReason('');
+      setRejectionReason("");
       toast.success(`Document ${status} successfully`);
     } catch (err) {
-      toast.error('Failed to review document');
+      toast.error("Failed to review document");
       console.error(err);
     } finally {
       setReviewing(false);
     }
   };
 
-  const handleVerificationStatus = async (restaurantId: string, isVerified: boolean) => {
+  const handleVerificationStatus = async (
+    restaurantId: string,
+    isVerified: boolean
+  ) => {
     try {
       await adminVerificationService.updateRestaurantVerificationStatus(
         restaurantId,
         isVerified
       );
       await loadVerifications();
-      toast.success(`Restaurant ${isVerified ? 'verified' : 'verification revoked'} successfully`);
+      toast.success(
+        `Restaurant ${
+          isVerified ? "verified" : "verification revoked"
+        } successfully`
+      );
     } catch (err) {
-      toast.error('Failed to update verification status');
+      toast.error("Failed to update verification status");
       console.error(err);
     }
   };
 
-  const filteredVerifications = verifications.filter(verification => {
+  const filteredVerifications = verifications.filter((verification) => {
     if (!verification) return false;
-    
+
     if (!verification.status) {
-      verification.status = { 
+      verification.status = {
         isVerified: false,
-        state: 'pending'
+        state: "pending",
       };
     }
 
     switch (filter) {
-      case 'approved':
+      case "approved":
         return verification.status.isVerified;
-      case 'pending':
-        return !verification.status.isVerified && verification.status.state !== 'rejected';
-      case 'rejected':
-        return verification.status.state === 'rejected';
+      case "pending":
+        return (
+          !verification.status.isVerified &&
+          verification.status.state !== "rejected"
+        );
+      case "rejected":
+        return verification.status.state === "rejected";
       default:
         return true;
     }
@@ -105,32 +118,34 @@ export default function VerificationReview() {
 
   const FilterButton = ({ value }: { value: string }) => (
     <button
-      onClick={() => setFilter(value as 'all' | 'approved' | 'pending' | 'rejected')}
+      onClick={() =>
+        setFilter(value as "all" | "approved" | "pending" | "rejected")
+      }
       className={`px-4 py-2 rounded-lg capitalize transition-colors ${
         filter === value
-          ? 'bg-black text-white'
-          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          ? "bg-black text-white"
+          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
       }`}
     >
       {value}
     </button>
   );
 
-  const StatusBadge = ({ status }: { status: Verification['status'] }) => {
+  const StatusBadge = ({ status }: { status: Verification["status"] }) => {
     if (!status) return null;
 
     const getStatus = () => {
-      if (status.isVerified) return 'approved';
-      if (status.state === 'rejected') return 'rejected';
-      return 'pending';
+      if (status.isVerified) return "approved";
+      if (status.state === "rejected") return "rejected";
+      return "pending";
     };
 
     const currentStatus = getStatus();
-    
+
     const styles = {
-      approved: 'bg-green-100 text-green-800',
-      rejected: 'bg-red-100 text-red-800',
-      pending: 'bg-yellow-100 text-yellow-800',
+      approved: "bg-green-100 text-green-800",
+      rejected: "bg-red-100 text-red-800",
+      pending: "bg-yellow-100 text-yellow-800",
     }[currentStatus];
 
     return (
@@ -140,10 +155,10 @@ export default function VerificationReview() {
     );
   };
 
-  const RestaurantCard = ({ 
+  const RestaurantCard = ({
     verification,
     isExpanded,
-    onToggleExpand 
+    onToggleExpand,
   }: {
     verification: Verification;
     isExpanded: boolean;
@@ -152,8 +167,12 @@ export default function VerificationReview() {
     <div className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
       <div className="flex justify-between items-start mb-4">
         <div>
-          <h3 className="text-xl font-semibold">{verification.restaurantName}</h3>
-          <p className="text-sm text-gray-500">{verification.documents.length} documents</p>
+          <h3 className="text-xl font-semibold">
+            {verification.restaurantName}
+          </h3>
+          <p className="text-sm text-gray-500">
+            {verification.documents.length} documents
+          </p>
         </div>
         <StatusBadge status={verification.status} />
       </div>
@@ -176,13 +195,13 @@ export default function VerificationReview() {
 
       {isExpanded && (
         <div className="mt-4 space-y-4 border-t pt-4">
-          {verification.documents.map(doc => (
+          {verification.documents.map((doc) => (
             <div key={doc.id} className="border rounded-lg p-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <h4 className="font-medium">{doc.type.replace('_', ' ')}</h4>
+                  <h4 className="font-medium">{doc.type.replace("_", " ")}</h4>
                   <p className="text-sm text-gray-500">
-                    Uploaded {format(new Date(doc.uploadedAt), 'PPp')}
+                    Uploaded {format(new Date(doc.uploadedAt), "PPp")}
                   </p>
                 </div>
                 <a
@@ -204,20 +223,24 @@ export default function VerificationReview() {
           onClick={onToggleExpand}
           className="text-blue-500 hover:text-blue-700"
         >
-          {isExpanded ? 'Hide Documents' : 'View Documents'}
+          {isExpanded ? "Hide Documents" : "View Documents"}
         </button>
         <button
-          onClick={() => handleVerificationStatus(
-            verification.restaurantId,
-            !verification.status.isVerified
-          )}
+          onClick={() =>
+            handleVerificationStatus(
+              verification.restaurantId,
+              !verification.status.isVerified
+            )
+          }
           className={`px-4 py-2 rounded-lg ${
             verification.status.isVerified
-              ? 'bg-red-500 text-white hover:bg-red-600'
-              : 'bg-green-500 text-white hover:bg-green-600'
+              ? "bg-red-500 text-white hover:bg-red-600"
+              : "bg-green-500 text-white hover:bg-green-600"
           }`}
         >
-          {verification.status.isVerified ? 'Revoke Verification' : 'Verify Restaurant'}
+          {verification.status.isVerified
+            ? "Revoke Verification"
+            : "Verify Restaurant"}
         </button>
       </div>
     </div>
@@ -235,9 +258,11 @@ export default function VerificationReview() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
-          <h1 className="text-2xl font-semibold mb-4 lg:mb-0">Restaurant Verification</h1>
+          <h1 className="text-2xl font-semibold mb-4 lg:mb-0">
+            Restaurant Verification
+          </h1>
           <div className="flex flex-wrap gap-2">
-            {['all', 'approved', 'pending', 'rejected'].map((filterOption) => (
+            {["all", "approved", "pending", "rejected"].map((filterOption) => (
               <FilterButton key={filterOption} value={filterOption} />
             ))}
           </div>
@@ -252,12 +277,18 @@ export default function VerificationReview() {
                 No restaurants found
               </div>
             ) : (
-              filteredVerifications.map(verification => (
+              filteredVerifications.map((verification) => (
                 <RestaurantCard
                   key={verification.restaurantId}
                   verification={verification}
                   isExpanded={expandedId === verification.restaurantId}
-                  onToggleExpand={() => setExpandedId(prevId => prevId === verification.restaurantId ? null : verification.restaurantId)}
+                  onToggleExpand={() =>
+                    setExpandedId((prevId) =>
+                      prevId === verification.restaurantId
+                        ? null
+                        : verification.restaurantId
+                    )
+                  }
                 />
               ))
             )}
@@ -266,4 +297,4 @@ export default function VerificationReview() {
       </div>
     </div>
   );
-} 
+}

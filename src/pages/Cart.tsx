@@ -29,6 +29,7 @@ import { Rider } from "../types/rider";
 import { useAddress } from "../contexts/AddressContext";
 import { LOCATIONS } from "../constants/locations";
 import { riderService } from "../services/riderService";
+import LoadingButton from "../components/LoadingButton";
 
 interface PaystackResponse {
   reference: string;
@@ -108,6 +109,7 @@ export default function Cart() {
     hostelName: "",
     location: LOCATIONS[0],
   });
+  const [isSaving, setIsSaving] = useState(false);
 
   const calculatePackTotal = (items: CartItem[]) => {
     return items.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -404,6 +406,7 @@ export default function Cart() {
     }
 
     try {
+      setIsSaving(true);
       const formattedAddress = {
         address: `${newAddress.hostelName}, ${newAddress.location}`,
         additionalInstructions: "",
@@ -419,6 +422,8 @@ export default function Cart() {
     } catch (error) {
       console.error("Error saving address:", error);
       toast.error("Failed to save address");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -919,12 +924,12 @@ export default function Cart() {
                     </option>
                   ))}
                 </select>
-                <button
+                <LoadingButton
+                  isLoading={isSaving}
                   onClick={handleSaveNewAddress}
-                  className="w-full py-3 bg-black text-white rounded-lg hover:bg-gray-900"
                 >
                   Save Address
-                </button>
+                </LoadingButton>
               </div>
             </div>
           </div>

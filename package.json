@@ -41,6 +41,7 @@
     "react-time-picker": "^7.0.0",
     "sharp": "^0.33.5",
     "tailwind-scrollbar-hide": "^2.0.0",
+    "tailwindcss-safe-area": "^0.6.0",
     "vercel": "^39.0.5",
     "web-push": "^3.6.7"
   },

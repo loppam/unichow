@@ -292,11 +292,11 @@ export const orderService = {
   ) {
     const ordersRef = collection(db, "orders");
 
-    // Query for orders that are either assigned to this rider or ready for pickup
+    // Query for orders assigned to this rider
     const q = query(
       ordersRef,
       where("riderId", "==", riderId),
-      where("status", "in", ["assigned", "preparing", "ready", "picked_up"]),
+      where("status", "in", ["accepted", "preparing", "ready", "picked_up"]),
       orderBy("createdAt", "asc")
     );
 

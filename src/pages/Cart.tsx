@@ -28,7 +28,7 @@ import { Wallet } from "../types/wallet";
 import { Rider } from "../types/rider";
 import { useAddress } from "../contexts/AddressContext";
 import { LOCATIONS } from "../constants/locations";
-import { riderService } from "../services/riderService";
+import { riderAssignmentService } from "../services/riderAssignmentService";
 import LoadingButton from "../components/LoadingButton";
 
 interface PaystackResponse {
@@ -236,7 +236,7 @@ export default function Cart() {
 
       // Add rider assignment after order creation
       try {
-        await riderService.assignRiderToOrder(orderId);
+        await riderAssignmentService.assignRiderToOrder(orderId);
       } catch (error) {
         console.error("Failed to assign rider:", error);
         // Don't block the order confirmation, just log the error
@@ -273,7 +273,7 @@ export default function Cart() {
             order: confirmedOrderData,
           },
         });
-      }, 3000);
+      }, 100);
 
       toast.success("Order placed successfully!");
     } catch (error) {
@@ -597,7 +597,7 @@ export default function Cart() {
 
       // Add rider assignment after order creation
       try {
-        await riderService.assignRiderToOrder(orderId);
+        await riderAssignmentService.assignRiderToOrder(orderId);
       } catch (error) {
         console.error("Failed to assign rider:", error);
       }
@@ -633,7 +633,7 @@ export default function Cart() {
             order: confirmedOrderData,
           },
         });
-      }, 10000);
+      }, 100);
 
       toast.success("Order placed successfully!");
     } catch (error) {

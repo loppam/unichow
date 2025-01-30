@@ -101,6 +101,14 @@ export default function OrderManagement() {
       // Then try to assign a rider immediately
       const riderId = await riderAssignmentService.assignRiderToOrder(orderId);
 
+      if (!riderId) {
+        // If rider assignment fails, start retry attempts in background
+        await riderAssignmentService.scheduleRiderAssignment(orderId);
+        toast.success("Order accepted. Searching for available riders...");
+      } else {
+        toast.success("Order accepted and rider assigned");
+      }
+
       // Update local state
       setOrders((prev) =>
         prev.map((order) =>
@@ -113,12 +121,6 @@ export default function OrderManagement() {
             : order
         )
       );
-
-      if (riderId) {
-        toast.success("Order accepted and rider assigned");
-      } else {
-        toast.success("Order accepted. Searching for riders...");
-      }
     } catch (err) {
       console.error("Error accepting order:", err);
       setError("Failed to accept order");

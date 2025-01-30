@@ -18,6 +18,7 @@ import { Order } from "../types/order";
 
 const RIDER_IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 const ASSIGNMENT_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const RETRY_INTERVALS = [30000, 60000, 120000]; // 30s, 1min, 2min
 
 export const riderAssignmentService = {
   async assignRiderToOrder(orderId: string): Promise<string | null> {
@@ -75,11 +76,8 @@ export const riderAssignmentService = {
       // Update order with rider assignment
       await updateDoc(orderRef, {
         riderId,
-        status: "assigned",
         assignedAt: serverTimestamp(),
       });
-
-      console.log("Successfully assigned rider:", riderId);
       return riderId;
     } catch (error) {
       console.error("Error assigning rider:", error);
@@ -96,8 +94,9 @@ export const riderAssignmentService = {
       const ordersRef = collection(db, "orders");
       const q = query(
         ordersRef,
-        where("status", "==", "assigned"),
-        where("assignedAt", "<=", timeoutThreshold)
+        where("status", "==", "accepted"),
+        where("assignedAt", "<=", timeoutThreshold),
+        where("riderId", "!=", null) // Only check orders that have a rider assigned
       );
 
       const ordersSnapshot = await getDocs(q);
@@ -106,9 +105,8 @@ export const riderAssignmentService = {
         try {
           const order = orderDoc.data() as Order;
 
-          // Reset order assignment
+          // Reset order assignment but keep status as accepted
           await updateDoc(orderDoc.ref, {
-            status: "ready",
             riderId: null,
             assignedAt: null,
             updatedAt: serverTimestamp(),
@@ -128,6 +126,10 @@ export const riderAssignmentService = {
               });
             }
           }
+
+          // Start the retry process instead of immediate reassignment
+          await this.scheduleRiderAssignment(orderDoc.id);
+          console.log(`Started retry process for order ${orderDoc.id}`);
         } catch (error) {
           console.error(`Error processing order ${orderDoc.id}:`, error);
         }
@@ -156,5 +158,53 @@ export const riderAssignmentService = {
         lastActivity: serverTimestamp(),
       });
     }
+  },
+
+  async updateRiderActivity(riderId: string): Promise<void> {
+    const riderRef = doc(db, "riders", riderId);
+    await updateDoc(riderRef, {
+      lastActivity: serverTimestamp(),
+    });
+  },
+
+  async scheduleRiderAssignment(orderId: string): Promise<void> {
+    let retryCount = 0;
+
+    const attemptAssignment = async () => {
+      try {
+        // Check if order still needs a rider
+        const orderRef = doc(db, "orders", orderId);
+        const orderDoc = await getDoc(orderRef);
+        if (!orderDoc.exists()) return;
+
+        const order = orderDoc.data() as Order;
+        if (order.riderId || order.status !== "accepted") return;
+
+        // Try to assign rider
+        const riderId = await this.assignRiderToOrder(orderId);
+
+        if (!riderId && retryCount < RETRY_INTERVALS.length) {
+          // Schedule next retry
+          setTimeout(attemptAssignment, RETRY_INTERVALS[retryCount]);
+          retryCount++;
+        } else if (!riderId) {
+          // All retries failed, update order to need manual intervention
+          await updateDoc(orderRef, {
+            needsRiderAssignment: true,
+            updatedAt: serverTimestamp(),
+          });
+
+          // Could also notify admin/restaurant here
+          console.error(
+            `Failed to assign rider to order ${orderId} after all retries`
+          );
+        }
+      } catch (error) {
+        console.error(`Error in retry attempt for order ${orderId}:`, error);
+      }
+    };
+
+    // Start first retry attempt
+    setTimeout(attemptAssignment, RETRY_INTERVALS[0]);
   },
 };

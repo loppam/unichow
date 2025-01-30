@@ -1,15 +1,24 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Home, ShoppingBag, Menu, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  ClipboardList,
+  UtensilsCrossed,
+  Settings,
+} from "lucide-react";
 
 export default function RestaurantNavigation() {
   const location = useLocation();
 
   const navItems = [
-    { path: '/restaurant-dashboard', icon: Home, label: 'Dashboard' },
-    { path: '/restaurant-orders', icon: ShoppingBag, label: 'Orders' },
-    { path: '/restaurant-menu', icon: Menu, label: 'Menu' },
-    { path: '/restaurant-settings', icon: Settings, label: 'Settings' },
+    {
+      path: "/restaurant-dashboard",
+      icon: LayoutDashboard,
+      label: "Dashboard",
+    },
+    { path: "/restaurant-orders", icon: ClipboardList, label: "Orders" },
+    { path: "/restaurant-menu", icon: UtensilsCrossed, label: "Menu" },
+    { path: "/restaurant-settings", icon: Settings, label: "Settings" },
   ];
 
   return (
@@ -20,7 +29,7 @@ export default function RestaurantNavigation() {
             key={path}
             to={path}
             className={`flex flex-col items-center py-2 px-3 md:py-3 md:px-6 min-w-[64px] ${
-              location.pathname === path ? 'text-black' : 'text-gray-500'
+              location.pathname === path ? "text-black" : "text-gray-500"
             }`}
           >
             <Icon className="h-5 w-5 md:h-6 md:w-6" />

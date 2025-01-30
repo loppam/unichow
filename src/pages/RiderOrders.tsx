@@ -94,6 +94,14 @@ export default function RiderOrders() {
         return;
       }
 
+      // Only allow status updates if order is "ready" or already "picked_up"
+      if (orderData.status !== "ready" && orderData.status !== "picked_up") {
+        toast.error(
+          "Cannot update order status until restaurant marks it ready"
+        );
+        return;
+      }
+
       // Now update the order status
       await updateDoc(orderRef, {
         status: newStatus,

@@ -8,5 +8,8 @@ module.exports = {
       },
     },
   },
-  plugins: [require("tailwind-scrollbar-hide")],
+  plugins: [
+    require("tailwindcss-safe-area"),
+    require("tailwind-scrollbar-hide"),
+  ],
 };

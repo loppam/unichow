@@ -20,6 +20,7 @@ export type OrderStatus =
   | "accepted"
   | "preparing"
   | "ready"
+  | "picked_up"
   | "delivered"
   | "cancelled"
   | "assigned"

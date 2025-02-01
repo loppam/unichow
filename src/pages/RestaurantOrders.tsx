@@ -9,6 +9,7 @@ import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useNavigate } from "react-router-dom";
 import { Timestamp } from "firebase/firestore";
+import { riderAssignmentService } from "../services/riderAssignmentService";
 
 export default function RestaurantOrders() {
   const { user } = useAuth();
@@ -77,6 +78,16 @@ export default function RestaurantOrders() {
         status: newStatus,
         updatedAt: new Date().toISOString(),
       });
+
+      // If the order is being accepted, trigger rider assignment
+      if (newStatus === "accepted") {
+        try {
+          await riderAssignmentService.assignRiderToOrder(orderId);
+        } catch (error) {
+          console.error("Failed to assign rider:", error);
+          // Don't block the order acceptance, just log the error
+        }
+      }
 
       // Local state will be updated automatically by the subscription
     } catch (err) {

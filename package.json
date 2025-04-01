@@ -69,5 +69,8 @@
       "no-unused-vars": 0,
       "@typescript-eslint/no-unused-vars": 0
     }
+  },
+  "resolutions": {
+    "camelcase-css": "^2.0.2"
   }
 }

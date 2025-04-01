@@ -40,6 +40,7 @@ export default function CreateAdmin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -67,7 +68,7 @@ export default function CreateAdmin() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsProcessing(true);
     setError("");
     setSuccess("");
 
@@ -100,7 +101,7 @@ export default function CreateAdmin() {
       setError((err as Error)?.message || "Failed to create admin account");
       console.error(err);
     } finally {
-      setLoading(false);
+      setIsProcessing(false);
     }
   };
 
@@ -256,15 +257,13 @@ export default function CreateAdmin() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={isProcessing}
               className="w-full bg-black text-white py-2 px-4 rounded-lg hover:bg-gray-800 disabled:opacity-50"
             >
-              {loading
+              {isProcessing
                 ? "Creating..."
                 : `Create ${
-                    formData.role === ROLES.SUPERADMIN
-                      ? "Super Admin"
-                      : "Admin"
+                    formData.role === ROLES.SUPERADMIN ? "Super Admin" : "Admin"
                   }`}
             </button>
           </form>

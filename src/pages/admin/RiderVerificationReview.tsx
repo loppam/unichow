@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { adminVerificationService } from '../../services/adminVerificationService';
-import { format } from 'date-fns';
-import { toast } from 'react-hot-toast';
-import { VerificationDocument } from '../../types/verification';
+import { useState, useEffect } from "react";
+import { adminVerificationService } from "../../services/adminVerificationService";
+import { format } from "date-fns";
+import { toast } from "react-hot-toast";
+import { VerificationDocument } from "../../types/verification";
 
 interface RiderVerification {
   riderId: string;
@@ -13,7 +13,7 @@ interface RiderVerification {
   vehiclePlate: string;
   status: {
     isVerified: boolean;
-    state?: 'pending' | 'approved' | 'rejected';
+    state?: "pending" | "approved" | "rejected";
   };
   documents: VerificationDocument[];
 }
@@ -21,10 +21,13 @@ interface RiderVerification {
 export default function RiderVerificationReview() {
   const [verifications, setVerifications] = useState<RiderVerification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionReason, setRejectionReason] = useState("");
   const [reviewing, setReviewing] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'approved' | 'pending' | 'rejected'>('all');
+  const [filter, setFilter] = useState<
+    "all" | "approved" | "pending" | "rejected"
+  >("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     loadVerifications();
@@ -32,10 +35,11 @@ export default function RiderVerificationReview() {
 
   const loadVerifications = async () => {
     try {
-      const data = await adminVerificationService.getPendingRiderVerifications();
+      const data =
+        await adminVerificationService.getPendingRiderVerifications();
       setVerifications(data);
     } catch (err) {
-      toast.error('Failed to load verifications');
+      toast.error("Failed to load verifications");
       console.error(err);
     } finally {
       setLoading(false);
@@ -45,7 +49,7 @@ export default function RiderVerificationReview() {
   const handleReview = async (
     riderId: string,
     documentId: string,
-    status: 'approved' | 'rejected'
+    status: "approved" | "rejected"
   ) => {
     setReviewing(true);
     try {
@@ -53,51 +57,62 @@ export default function RiderVerificationReview() {
         riderId,
         documentId,
         status,
-        status === 'rejected' ? rejectionReason : undefined
+        status === "rejected" ? rejectionReason : undefined
       );
-      
+
       await loadVerifications();
-      setRejectionReason('');
+      setRejectionReason("");
       toast.success(`Document ${status} successfully`);
     } catch (err) {
-      toast.error('Failed to review document');
+      toast.error("Failed to review document");
       console.error(err);
     } finally {
       setReviewing(false);
     }
   };
 
-  const handleVerificationStatus = async (riderId: string, isVerified: boolean) => {
+  const handleVerificationStatus = async (
+    riderId: string,
+    isVerified: boolean
+  ) => {
+    setIsProcessing(true);
     try {
       await adminVerificationService.updateRiderVerificationStatus(
         riderId,
         isVerified
       );
       await loadVerifications();
-      toast.success(`Rider ${isVerified ? 'verified' : 'verification revoked'} successfully`);
+      toast.success(
+        `Rider ${isVerified ? "verified" : "verification revoked"} successfully`
+      );
     } catch (err) {
-      toast.error('Failed to update verification status');
+      toast.error("Failed to update verification status");
       console.error(err);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const filteredVerifications = verifications.filter(verification => {
+  const filteredVerifications = verifications.filter((verification) => {
     if (!verification) return false;
-    
+
     if (!verification.status) {
-      verification.status = { 
+      verification.status = {
         isVerified: false,
-        state: 'pending'
+        state: "pending",
       };
     }
 
     switch (filter) {
-      case 'approved':
+      case "approved":
         return verification.status.isVerified;
-      case 'pending':
-        return !verification.status.isVerified && verification.status.state !== 'rejected';
-      case 'rejected':
-        return verification.status.state === 'rejected';
+      case "pending":
+        return (
+          !verification.status.isVerified &&
+          verification.status.state !== "rejected"
+        );
+      case "rejected":
+        return verification.status.state === "rejected";
       default:
         return true;
     }
@@ -105,32 +120,34 @@ export default function RiderVerificationReview() {
 
   const FilterButton = ({ value }: { value: string }) => (
     <button
-      onClick={() => setFilter(value as 'all' | 'approved' | 'pending' | 'rejected')}
+      onClick={() =>
+        setFilter(value as "all" | "approved" | "pending" | "rejected")
+      }
       className={`px-4 py-2 rounded-lg capitalize transition-colors ${
         filter === value
-          ? 'bg-black text-white'
-          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          ? "bg-black text-white"
+          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
       }`}
     >
       {value}
     </button>
   );
 
-  const StatusBadge = ({ status }: { status: RiderVerification['status'] }) => {
+  const StatusBadge = ({ status }: { status: RiderVerification["status"] }) => {
     if (!status) return null;
 
     const getStatus = () => {
-      if (status.isVerified) return 'approved';
-      if (status.state === 'rejected') return 'rejected';
-      return 'pending';
+      if (status.isVerified) return "approved";
+      if (status.state === "rejected") return "rejected";
+      return "pending";
     };
 
     const currentStatus = getStatus();
-    
+
     const styles = {
-      approved: 'bg-green-100 text-green-800',
-      rejected: 'bg-red-100 text-red-800',
-      pending: 'bg-yellow-100 text-yellow-800',
+      approved: "bg-green-100 text-green-800",
+      rejected: "bg-red-100 text-red-800",
+      pending: "bg-yellow-100 text-yellow-800",
     }[currentStatus];
 
     return (
@@ -140,10 +157,10 @@ export default function RiderVerificationReview() {
     );
   };
 
-  const RiderCard = ({ 
+  const RiderCard = ({
     verification,
     isExpanded,
-    onToggleExpand 
+    onToggleExpand,
   }: {
     verification: RiderVerification;
     isExpanded: boolean;
@@ -153,7 +170,9 @@ export default function RiderVerificationReview() {
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="text-xl font-semibold">{verification.riderName}</h3>
-          <p className="text-sm text-gray-500">{verification.documents.length} documents</p>
+          <p className="text-sm text-gray-500">
+            {verification.documents.length} documents
+          </p>
         </div>
         <StatusBadge status={verification.status} />
       </div>
@@ -177,13 +196,13 @@ export default function RiderVerificationReview() {
 
       {isExpanded && (
         <div className="mt-4 space-y-4 border-t pt-4">
-          {verification.documents.map(doc => (
+          {verification.documents.map((doc) => (
             <div key={doc.id} className="border rounded-lg p-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <h4 className="font-medium">{doc.type.replace(/_/g, ' ')}</h4>
+                  <h4 className="font-medium">{doc.type.replace(/_/g, " ")}</h4>
                   <p className="text-sm text-gray-500">
-                    Uploaded {format(new Date(doc.uploadedAt), 'PPp')}
+                    Uploaded {format(new Date(doc.uploadedAt), "PPp")}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -195,17 +214,21 @@ export default function RiderVerificationReview() {
                   >
                     View File
                   </a>
-                  {doc.status === 'pending' && (
+                  {doc.status === "pending" && (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleReview(verification.riderId, doc.id, 'approved')}
+                        onClick={() =>
+                          handleReview(verification.riderId, doc.id, "approved")
+                        }
                         className="text-green-500 hover:text-green-700"
                         disabled={reviewing}
                       >
                         Approve
                       </button>
                       <button
-                        onClick={() => handleReview(verification.riderId, doc.id, 'rejected')}
+                        onClick={() =>
+                          handleReview(verification.riderId, doc.id, "rejected")
+                        }
                         className="text-red-500 hover:text-red-700"
                         disabled={reviewing}
                       >
@@ -225,20 +248,27 @@ export default function RiderVerificationReview() {
           onClick={onToggleExpand}
           className="text-blue-500 hover:text-blue-700"
         >
-          {isExpanded ? 'Hide Documents' : 'View Documents'}
+          {isExpanded ? "Hide Documents" : "View Documents"}
         </button>
         <button
-          onClick={() => handleVerificationStatus(
-            verification.riderId,
-            !verification.status.isVerified
-          )}
+          onClick={() =>
+            handleVerificationStatus(
+              verification.riderId,
+              !verification.status.isVerified
+            )
+          }
+          disabled={isProcessing}
           className={`px-4 py-2 rounded-lg ${
             verification.status.isVerified
-              ? 'bg-red-500 text-white hover:bg-red-600'
-              : 'bg-green-500 text-white hover:bg-green-600'
+              ? "bg-red-500 text-white hover:bg-red-600"
+              : "bg-green-500 text-white hover:bg-green-600"
           }`}
         >
-          {verification.status.isVerified ? 'Revoke Verification' : 'Verify Rider'}
+          {isProcessing
+            ? "Processing..."
+            : verification.status.isVerified
+            ? "Revoke Verification"
+            : "Verify Rider"}
         </button>
       </div>
     </div>
@@ -256,9 +286,11 @@ export default function RiderVerificationReview() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
-          <h1 className="text-2xl font-semibold mb-4 lg:mb-0">Rider Verification</h1>
+          <h1 className="text-2xl font-semibold mb-4 lg:mb-0">
+            Rider Verification
+          </h1>
           <div className="flex flex-wrap gap-2">
-            {['all', 'approved', 'pending', 'rejected'].map((filterOption) => (
+            {["all", "approved", "pending", "rejected"].map((filterOption) => (
               <FilterButton key={filterOption} value={filterOption} />
             ))}
           </div>
@@ -272,14 +304,18 @@ export default function RiderVerificationReview() {
                 No riders found
               </div>
             ) : (
-              filteredVerifications.map(verification => (
+              filteredVerifications.map((verification) => (
                 <RiderCard
                   key={verification.riderId}
                   verification={verification}
                   isExpanded={expandedId === verification.riderId}
-                  onToggleExpand={() => setExpandedId(prevId => 
-                    prevId === verification.riderId ? null : verification.riderId
-                  )}
+                  onToggleExpand={() =>
+                    setExpandedId((prevId) =>
+                      prevId === verification.riderId
+                        ? null
+                        : verification.riderId
+                    )
+                  }
                 />
               ))
             )}

@@ -22,6 +22,8 @@ export default function UserManagement() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const { isSuperAdmin } = useAuth();
+  const [isProcessing, setIsProcessing] = useState(false);
+
   useEffect(() => {
     loadUsers();
   }, []);
@@ -48,6 +50,7 @@ export default function UserManagement() {
   };
 
   const handleDeleteUser = async (userId: string) => {
+    setIsProcessing(true);
     if (!window.confirm("Are you sure you want to delete this user?")) return;
 
     try {
@@ -57,6 +60,8 @@ export default function UserManagement() {
     } catch (err: unknown) {
       setError((err as Error)?.message || "Failed to delete user");
       console.error(err);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -139,9 +144,14 @@ export default function UserManagement() {
                   {isSuperAdmin && user.email !== "lolade132@gmail.com" && (
                     <button
                       onClick={() => handleDeleteUser(user.id)}
+                      disabled={isProcessing}
                       className="text-red-600 hover:text-red-900"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      {isProcessing ? (
+                        "Deleting..."
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
                     </button>
                   )}
                 </td>

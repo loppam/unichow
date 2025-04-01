@@ -11,12 +11,14 @@ import Input from "../components/Input";
 import { ArrowLeft, Store, User as UserIcon, Bike } from "lucide-react"; // Import icons
 import { notificationService } from "../services/notificationService";
 import { RiderStatus } from "../types/rider";
+import { LOCATIONS } from "../constants/locations"; // Import landmark options
 
 const CUISINE_TYPES = ["Pastries", "Smoothies", "Fast Food"];
+const LANDMARKS = LOCATIONS; // Use imported landmarks
 
 export default function Register() {
   const [userType, setUserType] = useState<
-    "user" | "restaurant" | "rider" | null
+    "customer" | "restaurant" | "rider" | null
   >(null);
   const [formData, setFormData] = useState({
     phone: "",
@@ -40,16 +42,19 @@ export default function Register() {
     workingHours: "full-time",
     emergencyContact: "",
     emergencyPhone: "",
+    landmark: "", // Add landmark field
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
@@ -73,7 +78,7 @@ export default function Register() {
       );
 
       // Wait for auth state to be ready
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Prepare user data
       const userData = {
@@ -82,8 +87,9 @@ export default function Register() {
         lastName: formData.lastName,
         phone: formData.phone,
         birthday: formData.birthday,
-        address: formData.address,
+        address: `${formData.address} (${formData.landmark})`,
         userType: userType,
+        name: `${formData.firstName} ${formData.lastName}`,
         emailVerified: false,
         createdAt: new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
@@ -95,10 +101,9 @@ export default function Register() {
           closingHours: formData.closingHours,
           isApproved: false,
         }),
-        ...(userType === "user" && {
-          name: `${formData.firstName} ${formData.lastName}`,
+        ...(userType === "customer" && {
           phoneNumber: formData.phone,
-          defaultAddress: formData.address,
+          defaultAddress: `${formData.address} (${formData.landmark})`,
         }),
         ...(userType === "rider" && {
           vehicleType: formData.vehicleType,
@@ -112,13 +117,29 @@ export default function Register() {
           emergencyContact: formData.emergencyContact,
           emergencyPhone: formData.emergencyPhone,
         }),
+        landmark: formData.landmark,
       };
 
       // Store in Firestore
       const batch = writeBatch(db);
 
-      // Update user document
-      batch.set(doc(db, "users", userCredential.user.uid), userData);
+      // First create the user document
+      const userRef = doc(db, "users", userCredential.user.uid);
+      batch.set(userRef, userData);
+
+      // For customers, create additional customer document
+      if (userType === "customer") {
+        const customerData = {
+          id: userCredential.user.uid,
+          name: `${formData.firstName} ${formData.lastName}`,
+          email: formData.email,
+          phone: formData.phone,
+          address: `${formData.address} (${formData.landmark})`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        batch.set(doc(db, "customers", userCredential.user.uid), customerData);
+      }
 
       // For restaurants, create an additional document in restaurants collection
       if (userType === "restaurant") {
@@ -134,13 +155,15 @@ export default function Register() {
           phone: formData.phone,
           address: {
             address: formData.address,
-            additionalInstructions: ""
+            additionalInstructions: "",
           },
           createdAt: new Date().toISOString(),
+          ownerId: userCredential.user.uid,
         };
 
         // Update restaurant document
-        batch.set(doc(db, "restaurants", userCredential.user.uid), restaurantData);
+        const restaurantRef = doc(db, "restaurants", userCredential.user.uid);
+        batch.set(restaurantRef, restaurantData);
       }
 
       // For riders, create additional rider document
@@ -169,6 +192,9 @@ export default function Register() {
         batch.set(doc(db, "riders", userCredential.user.uid), riderData);
       }
 
+      // Commit the batch write
+      await batch.commit();
+
       // Send verification email
       await sendEmailVerification(userCredential.user);
 
@@ -186,19 +212,29 @@ export default function Register() {
 
       // Navigate based on user type
       navigate(
-        userType === "restaurant" 
-          ? "/restaurant-verify-email" 
+        userType === "restaurant"
+          ? "/restaurant-verify-email"
           : userType === "rider"
-            ? "/rider-verify-email"
-            : "/verify-email"
+          ? "/rider-verify-email"
+          : "/verify-email"
       );
-
     } catch (err) {
       console.error("Registration error:", err);
       if (err instanceof Error) {
-        setError(err.message);
+        // Check for specific Firebase error codes
+        if ("code" in err && err.code === "permission-denied") {
+          setError(
+            "Permission denied. Please try again or contact support if the issue persists."
+          );
+        } else if ("code" in err && err.code === "unavailable") {
+          setError(
+            "Service temporarily unavailable. Please try again in a few minutes."
+          );
+        } else {
+          setError(err.message);
+        }
       } else {
-        setError("Failed to create account");
+        setError("Failed to create account. Please try again.");
       }
 
       // Clean up if registration fails
@@ -265,7 +301,8 @@ export default function Register() {
   };
 
   // Add this consistent input style class
-  const inputClassName = "w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent";
+  const inputClassName =
+    "w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent";
 
   if (!userType) {
     return (
@@ -278,7 +315,7 @@ export default function Register() {
 
           <div className="space-y-4">
             <button
-              onClick={() => setUserType("user")}
+              onClick={() => setUserType("customer")}
               className="w-full p-6 border rounded-lg flex items-center gap-4 hover:bg-gray-50 transition-colors"
             >
               <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
@@ -468,7 +505,7 @@ export default function Register() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address *
               </label>
-              <input
+              <Input
                 name="email"
                 type="email"
                 placeholder="Enter your email address"
@@ -483,7 +520,7 @@ export default function Register() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Password *
               </label>
-              <input
+              <Input
                 name="password"
                 type="password"
                 placeholder="Enter your password"
@@ -498,7 +535,7 @@ export default function Register() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Phone Number *
               </label>
-              <input
+              <Input
                 name="phone"
                 placeholder="Enter your phone number"
                 value={formData.phone}
@@ -510,7 +547,7 @@ export default function Register() {
               />
             </div>
 
-            {userType === "user" && (
+            {userType === "customer" && (
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -569,6 +606,26 @@ export default function Register() {
                 className={inputClassName}
                 required
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Landmark *
+              </label>
+              <select
+                name="landmark"
+                value={formData.landmark}
+                onChange={handleChange}
+                className={inputClassName}
+                required
+              >
+                <option value="">Select a landmark</option>
+                {LANDMARKS.map((landmark) => (
+                  <option key={landmark} value={landmark}>
+                    {landmark}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

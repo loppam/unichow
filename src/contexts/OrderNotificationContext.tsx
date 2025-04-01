@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useAuth } from './AuthContext';
-import { notificationService } from '../services/notificationService';
-import type { OrderNotification } from '../types/order';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { useAuth } from "./AuthContext";
+import { notificationService } from "../services/notificationService";
+import type { OrderNotification } from "../types/order";
 
 interface OrderNotificationContextType {
   notifications: OrderNotification[];
@@ -18,25 +18,35 @@ const OrderNotificationContext = createContext<OrderNotificationContextType>({
   markAsRead: async () => {},
   markAllAsRead: async () => {},
   playSound: true,
-  setPlaySound: () => {}
+  setPlaySound: () => {},
 });
 
 export const useOrderNotifications = () => useContext(OrderNotificationContext);
 
-export function OrderNotificationProvider({ children }: { children: React.ReactNode }) {
+export function OrderNotificationProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<OrderNotification[]>([]);
   const [playSound, setPlaySound] = useState(true);
-  const [notificationSound] = useState(new Audio('/notification-sound.mp3'));
+  const [notificationSound] = useState(new Audio("/notification-sound.mp3"));
 
   useEffect(() => {
     if (!user) return;
+
+    // Only subscribe to notifications if the user is a restaurant
+    if (user.userType !== "restaurant") {
+      setNotifications([]);
+      return;
+    }
 
     const unsubscribe = notificationService.subscribeToOrderNotifications(
       user.uid,
       (newNotifications) => {
         setNotifications(newNotifications);
-        
+
         // Play sound for new notifications
         if (playSound && newNotifications.length > notifications.length) {
           notificationSound.play().catch(console.error);
@@ -48,12 +58,12 @@ export function OrderNotificationProvider({ children }: { children: React.ReactN
   }, [user, notifications.length, playSound, notificationSound]);
 
   const markAsRead = async (notificationId: string) => {
-    if (!user) return;
+    if (!user || user.userType !== "restaurant") return;
     await notificationService.markAsRead(user.uid, notificationId);
   };
 
   const markAllAsRead = async () => {
-    if (!user) return;
+    if (!user || user.userType !== "restaurant") return;
     await notificationService.markAllAsRead(user.uid);
   };
 
@@ -65,10 +75,10 @@ export function OrderNotificationProvider({ children }: { children: React.ReactN
         markAsRead,
         markAllAsRead,
         playSound,
-        setPlaySound
+        setPlaySound,
       }}
     >
       {children}
     </OrderNotificationContext.Provider>
   );
-} 
+}

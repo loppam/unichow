@@ -1,4 +1,4 @@
-import { db } from "../firebase/config";
+import { firestoreService } from "./firestoreService";
 import {
   collection,
   doc,
@@ -6,153 +6,177 @@ import {
   where,
   orderBy,
   limit,
-  updateDoc,
   getDoc,
   getDocs,
   onSnapshot,
   QueryConstraint,
-  deleteDoc,
-  addDoc,
-  serverTimestamp,
+  Timestamp,
+  DocumentSnapshot,
 } from "firebase/firestore";
 import {
   Order,
   OrderStatus,
-  Address,
-  PaymentStatus,
-  UserOrder,
   OrderItem,
 } from "../types/order";
+import { toast } from "react-hot-toast";
+
+type OrderWithoutId = Omit<Order, "id">;
 
 export const orderService = {
-  async getOrders(
-    restaurantId: string,
-    statuses: OrderStatus[],
-    startDate?: Date
-  ): Promise<Order[]> {
+  async getOrders(restaurantId: string): Promise<Order[]> {
     try {
-      const ordersRef = collection(db, "orders");
-
-      const constraints: QueryConstraint[] = [
-        where("restaurantId", "==", restaurantId),
-        where("status", "in", statuses),
-        orderBy("createdAt", "asc"),
-      ];
-
-      // Add date filter if startDate is provided
-      if (startDate) {
-        constraints.push(where("createdAt", ">=", startDate.toISOString()));
-      }
-
-      const q = query(ordersRef, ...constraints);
-      const querySnapshot = await getDocs(q);
-
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Order[];
+      return await firestoreService.getCollection<Order>("orders", [
+        firestoreService.where("restaurantId", "==", restaurantId),
+        firestoreService.orderBy("createdAt", "desc"),
+      ]);
     } catch (error) {
-      console.error("Error getting orders:", error);
-      throw error;
+      console.error("Error fetching orders:", error);
+      toast.error("Failed to fetch orders");
+      return [];
     }
   },
 
-  async getOrderById(orderId: string): Promise<Order> {
+  async getOrderById(orderId: string): Promise<Order | null> {
     try {
-      const orderDoc = await getDoc(doc(db, "orders", orderId));
-      if (!orderDoc.exists()) {
-        throw new Error("Order not found");
-      }
-      return { id: orderDoc.id, ...orderDoc.data() } as Order;
+      return await firestoreService.getDocument<Order>("orders", orderId);
     } catch (error) {
       console.error("Error fetching order:", error);
+      toast.error("Failed to fetch order");
+      return null;
+    }
+  },
+
+  async createOrder(order: OrderWithoutId): Promise<string> {
+    try {
+      const orderData = {
+        ...order,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      } as unknown as Order;
+      return await firestoreService.createDocument<Order>("orders", orderData);
+    } catch (error) {
+      console.error("Error creating order:", error);
+      toast.error("Failed to create order");
       throw error;
     }
   },
 
-  async updateOrderStatus(
-    userId: string,
-    orderId: string,
-    newStatus: OrderStatus
-  ): Promise<void> {
+  async updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
     try {
-      const orderRef = doc(db, "orders", orderId);
-      await updateDoc(orderRef, {
-        status: newStatus,
-        updatedAt: serverTimestamp(),
-        ...(newStatus === "delivered" && { deliveredAt: serverTimestamp() }),
-        ...(newStatus === "picked_up" && { pickedUpAt: serverTimestamp() }),
+      await firestoreService.updateDocument<Order>("orders", orderId, {
+        status,
+        updatedAt: Timestamp.now(),
       });
     } catch (error) {
       console.error("Error updating order status:", error);
+      toast.error("Failed to update order status");
       throw error;
     }
   },
 
-  subscribeToNewOrders(
-    restaurantId: string,
-    callback: (orders: Order[]) => void
-  ) {
-    const ordersRef = collection(db, "orders");
-    const q = query(
-      ordersRef,
-      where("restaurantId", "==", restaurantId),
-      where("status", "in", [
-        "pending",
-        "accepted",
-        "preparing",
-        "ready",
-        "delivered",
-      ]),
-      orderBy("createdAt", "asc")
-    );
-
-    return onSnapshot(q, (snapshot) => {
-      const orders = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Order[];
-      callback(orders);
-    });
+  async updateOrderAddress(orderId: string, address: string): Promise<void> {
+    try {
+      await firestoreService.updateDocument<Order>("orders", orderId, {
+        deliveryAddress: {
+          address,
+          additionalInstructions: "",
+        },
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      console.error("Error updating order address:", error);
+      toast.error("Failed to update order address");
+      throw error;
+    }
   },
 
-  async updatePaymentStatus(
+  async updateOrderPaymentStatus(
     orderId: string,
-    paymentStatus: PaymentStatus,
-    paymentReference?: string
+    isPaid: boolean
   ): Promise<void> {
     try {
-      const orderRef = doc(db, "orders", orderId);
-      const updates = {
-        paymentStatus,
-        ...(paymentReference && { paymentReference }),
-        updatedAt: new Date().toISOString(),
-      };
-      await updateDoc(orderRef, updates);
+      await firestoreService.updateDocument<Order>("orders", orderId, {
+        paymentStatus: isPaid ? "paid" : "pending",
+        updatedAt: Timestamp.now(),
+      });
     } catch (error) {
       console.error("Error updating payment status:", error);
+      toast.error("Failed to update payment status");
       throw error;
     }
   },
 
-  async getUserOrders(userId: string): Promise<UserOrder[]> {
+  async deleteOrder(orderId: string): Promise<void> {
     try {
-      const ordersRef = collection(db, "orders");
-      const q = query(
-        ordersRef,
-        where("customerId", "==", userId),
-        orderBy("createdAt", "asc")
-      );
+      await firestoreService.deleteDocument("orders", orderId);
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      toast.error("Failed to delete order");
+      throw error;
+    }
+  },
 
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        lastUpdated: doc.data().updatedAt || doc.data().createdAt,
-      })) as UserOrder[];
+  async getOrderHistory(userId: string, startDate?: Date): Promise<Order[]> {
+    try {
+      const constraints = [
+        firestoreService.where("customerId", "==", userId),
+        firestoreService.orderBy("createdAt", "desc"),
+      ];
+
+      if (startDate) {
+        constraints.push(
+          firestoreService.where(
+            "createdAt",
+            ">=",
+            Timestamp.fromDate(startDate)
+          )
+        );
+      }
+
+      return await firestoreService.getCollection<Order>("orders", constraints);
+    } catch (error) {
+      console.error("Error fetching order history:", error);
+      toast.error("Failed to fetch order history");
+      return [];
+    }
+  },
+
+  subscribeToOrderUpdates(
+    orderId: string,
+    callback: (order: Order | null) => void
+  ): () => void {
+    return firestoreService.subscribeToDocument<Order>(
+      "orders",
+      orderId,
+      callback
+    );
+  },
+
+  subscribeToActiveOrders(callback: (orders: Order[]) => void): () => void {
+    return firestoreService.subscribeToCollection<Order>(
+      "orders",
+      [
+        firestoreService.where("status", "in", [
+          "pending",
+          "accepted",
+          "assigned",
+          "picked_up",
+        ]),
+      ],
+      callback
+    );
+  },
+
+  async getUserOrders(userId: string): Promise<Order[]> {
+    try {
+      return await firestoreService.getCollection<Order>("orders", [
+        firestoreService.where("customerId", "==", userId),
+        firestoreService.orderBy("createdAt", "desc"),
+      ]);
     } catch (error) {
       console.error("Error fetching user orders:", error);
-      throw error;
+      toast.error("Failed to fetch user orders");
+      return [];
     }
   },
 
@@ -161,7 +185,7 @@ export const orderService = {
     today.setHours(0, 0, 0, 0);
 
     try {
-      const ordersRef = collection(db, "orders");
+      const ordersRef = collection(firestoreService.db, "orders");
 
       // Get completed orders for today
       const completedOrdersQuery = query(
@@ -228,61 +252,39 @@ export const orderService = {
     }
   },
 
-  async deleteOrder(orderId: string): Promise<void> {
-    await deleteDoc(doc(db, "orders", orderId));
-  },
-
-  async createOrder(
+  async getOrderHistoryWithPagination(
     userId: string,
-    orderData: {
-      packs: {
-        id: string;
-        restaurantName: string;
-        items: {
-          id: string;
-          name: string;
-          price: number;
-          quantity: number;
-          specialInstructions?: string;
-        }[];
-      }[];
-      restaurantId: string;
-      customerName: string;
-      customerPhone: string;
-      deliveryAddress: Address;
-      subtotal: number;
-      deliveryFee: number;
-      serviceFee: number;
-      total: number;
-      deliveryConfirmationCode: string;
-      paymentMethod: string;
-      paymentStatus: string;
-    }
-  ): Promise<string> {
+    pageSize: number = 10,
+    lastDoc?: DocumentSnapshot
+  ): Promise<{ orders: Order[]; lastDoc: DocumentSnapshot | null }> {
     try {
-      const orderRef = await addDoc(collection(db, "orders"), {
-        customerId: userId,
-        restaurantId: orderData.restaurantId,
-        status: "pending",
-        packs: orderData.packs,
-        customerName: orderData.customerName,
-        customerPhone: orderData.customerPhone,
-        deliveryAddress: orderData.deliveryAddress,
-        subtotal: orderData.subtotal,
-        deliveryFee: orderData.deliveryFee,
-        serviceFee: orderData.serviceFee,
-        total: orderData.total,
-        deliveryConfirmationCode: orderData.deliveryConfirmationCode,
-        paymentMethod: orderData.paymentMethod,
-        paymentStatus: orderData.paymentStatus,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      const constraints: QueryConstraint[] = [
+        firestoreService.where("customerId", "==", userId),
+        firestoreService.orderBy("createdAt", "desc"),
+        firestoreService.limit(pageSize),
+      ];
 
-      return orderRef.id;
+      if (lastDoc) {
+        constraints.push(firestoreService.startAfter(lastDoc));
+      }
+
+      const orders = await firestoreService.getCollection<Order>(
+        "orders",
+        constraints
+      );
+      const lastOrder = orders[orders.length - 1];
+      const lastDocSnapshot = lastOrder
+        ? await getDoc(doc(firestoreService.db, "orders", lastOrder.id))
+        : null;
+
+      return {
+        orders,
+        lastDoc: lastDocSnapshot,
+      };
     } catch (error) {
-      console.error("Error creating order:", error);
-      throw error;
+      console.error("Error getting order history:", error);
+      toast.error("Failed to fetch order history");
+      return { orders: [], lastDoc: null };
     }
   },
 
@@ -290,7 +292,7 @@ export const orderService = {
     riderId: string,
     callback: (orders: Order[]) => void
   ) {
-    const ordersRef = collection(db, "orders");
+    const ordersRef = collection(firestoreService.db, "orders");
 
     // Query for orders assigned to this rider
     const q = query(
@@ -304,7 +306,11 @@ export const orderService = {
       const ordersPromises = snapshot.docs.map(async (docSnapshot) => {
         const orderData = docSnapshot.data();
         // Get restaurant details
-        const restaurantRef = doc(db, "restaurants", orderData.restaurantId);
+        const restaurantRef = doc(
+          firestoreService.db,
+          "restaurants",
+          orderData.restaurantId
+        );
         const restaurantSnap = await getDoc(restaurantRef);
         const restaurantData = restaurantSnap.data();
 
@@ -339,7 +345,7 @@ export const orderService = {
   },
 
   subscribeToUserOrders(userId: string, callback: (orders: Order[]) => void) {
-    const ordersRef = collection(db, "orders");
+    const ordersRef = collection(firestoreService.db, "orders");
     const q = query(
       ordersRef,
       where("customerId", "==", userId),
@@ -352,6 +358,17 @@ export const orderService = {
         ...doc.data(),
       })) as Order[];
       callback(orders);
+    });
+  },
+
+  async getOrder(orderId: string): Promise<Order | null> {
+    return await firestoreService.getDocument("orders", orderId);
+  },
+
+  async updateOrderItems(orderId: string, items: OrderItem[]) {
+    await firestoreService.updateDocument("orders", orderId, {
+      items,
+      updatedAt: new Date().toISOString(),
     });
   },
 };

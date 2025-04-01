@@ -33,7 +33,7 @@ export default function RestaurantOrderView() {
     if (!order || !user) return;
 
     try {
-      await orderService.updateOrderStatus(user.uid, order.id, newStatus);
+      await orderService.updateOrderStatus(order.id, newStatus);
       setOrder((prev) => (prev ? { ...prev, status: newStatus } : null));
     } catch (error) {
       console.error("Error updating status:", error);
@@ -62,7 +62,9 @@ export default function RestaurantOrderView() {
           >
             ← Back
           </button>
-          <h1 className="text-xl font-semibold">Order #{order.id.slice(-6)}</h1>
+          <h1 className="text-xl font-semibold">
+            Order #{order?.id?.slice(-6) || "N/A"}
+          </h1>
           <div className="w-10" />
         </div>
       </div>
@@ -135,15 +137,22 @@ export default function RestaurantOrderView() {
                   {/* Restaurant Info */}
                   <div className="p-4 bg-gray-100">
                     <p className="font-medium">{pack.restaurantName}</p>
-                    <p className="text-sm text-gray-600">{pack.restaurantAddress}</p>
+                    <p className="text-sm text-gray-600">
+                      {pack.restaurantAddress}
+                    </p>
                   </div>
                   {/* Pack Items */}
                   <div className="p-4">
                     {pack.items.map((item, itemIndex) => (
-                      <div key={itemIndex} className="flex justify-between py-2 border-b last:border-0">
+                      <div
+                        key={itemIndex}
+                        className="flex justify-between py-2 border-b last:border-0"
+                      >
                         <div className="flex-1">
                           <p className="font-medium">{item.name}</p>
-                          <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                          <p className="text-sm text-gray-600">
+                            Quantity: {item.quantity}
+                          </p>
                           {item.specialInstructions && (
                             <p className="text-sm text-gray-500 mt-1">
                               Note: {item.specialInstructions}
@@ -166,7 +175,13 @@ export default function RestaurantOrderView() {
                     <div className="flex justify-between font-medium">
                       <span>Pack Subtotal</span>
                       <span>
-                        ₦{pack.items.reduce((sum, item) => sum + (item.price * item.quantity), 0).toLocaleString()}
+                        ₦
+                        {pack.items
+                          .reduce(
+                            (sum, item) => sum + item.price * item.quantity,
+                            0
+                          )
+                          .toLocaleString()}
                       </span>
                     </div>
                   </div>

@@ -1,8 +1,11 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { User as FirebaseUser, onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase/config';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { createContext, useContext, useEffect, useState } from "react";
+import {
+  User as FirebaseUser,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import { auth } from "../firebase/config";
+import { firestoreService } from "../services/firestoreService";
 
 interface User {
   uid: string;
@@ -12,13 +15,14 @@ interface User {
   lastName?: string;
   phone?: string;
   address?: string;
-  userType?: 'user' | 'restaurant' | 'rider';
+  userType?: "customer" | "restaurant" | "rider" | "admin";
   createdAt?: string;
   lastUpdated?: string;
   lastLogin?: string;
   isVerified?: boolean;
   role?: string;
   status?: string;
+  isSuperAdmin?: boolean;
   // Restaurant specific
   restaurantName?: string;
   description?: string;
@@ -37,56 +41,53 @@ interface User {
   totalDeliveries?: number;
 }
 
-type CustomUser = User & {
-  firstName?: string;
-  lastName?: string;
-  emailVerified: boolean;
-};
-
 interface AuthContextType {
-  user: CustomUser | null;
+  user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   isSuperAdmin: boolean;
-  // ... other auth methods
 }
 
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(
+  undefined
+);
 
-export function useAuth(): { user: CustomUser | null; loading: boolean; signIn: (email: string, password: string) => Promise<void>; signOut: () => Promise<void>; isSuperAdmin: boolean; } {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null | undefined>(undefined);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isVerified, setIsVerified] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const signIn = async (email: string, password: string): Promise<void> => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      // Update last login
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        lastLogin: new Date().toISOString()
-      }, { merge: true });
-      
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      // Update last login using firestoreService
+      await firestoreService.updateDocument("users", userCredential.user.uid, {
+        lastLogin: new Date().toISOString(),
+      });
     } catch (error) {
       if (error instanceof Error) {
-        if (error.message.includes('auth/invalid-credential')) {
-          throw new Error('Invalid email or password');
-        } else if (error.message.includes('auth/too-many-requests')) {
-          throw new Error('Too many failed attempts. Please try again later');
+        if (error.message.includes("auth/invalid-credential")) {
+          throw new Error("Invalid email or password");
+        } else if (error.message.includes("auth/too-many-requests")) {
+          throw new Error("Too many failed attempts. Please try again later");
         }
         throw error;
       }
-      throw new Error('An unexpected error occurred');
+      throw new Error("An unexpected error occurred");
     }
   };
 
@@ -94,50 +95,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await auth.signOut();
     } catch (error) {
-      console.error('Error signing out:', error);
-      throw new Error('Failed to sign out');
+      console.error("Error signing out:", error);
+      throw new Error("Failed to sign out");
     }
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setIsVerified(user?.emailVerified ?? false);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // Get user data from Firestore using firestoreService
+          const userData = await firestoreService.getDocument<User>(
+            "users",
+            firebaseUser.uid
+          );
+
+          if (userData) {
+            // Merge Firebase auth user with Firestore user data
+            setUser({
+              ...userData,
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              emailVerified: firebaseUser.emailVerified,
+            });
+
+            // Check for super admin
+            setIsSuperAdmin(
+              userData.role === "superadmin" || userData.isSuperAdmin === true
+            );
+          } else {
+            // If no Firestore document exists, just set basic user data
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              emailVerified: firebaseUser.emailVerified,
+            });
+            setIsSuperAdmin(false);
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            emailVerified: firebaseUser.emailVerified,
+          });
+          setIsSuperAdmin(false);
+        }
+      } else {
+        setUser(null);
+        setIsSuperAdmin(false);
+      }
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      const checkUserRole = async () => {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setIsSuperAdmin(
-              userData.role === 'superadmin' || 
-              userData.isSuperAdmin === true
-            );
-          }
-        } catch (error) {
-          console.error('Error checking user role:', error);
-        }
-      };
-      
-      checkUserRole();
-    } else {
-      setIsSuperAdmin(false);
-    }
-  }, [user]);
-
   const value: AuthContextType = {
-    user: user ? {
-      uid: user.uid,
-      email: user.email,
-      emailVerified: user.emailVerified,
-    } : null,
+    user,
     loading,
     signIn,
     signOut,

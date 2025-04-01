@@ -8,6 +8,7 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import BottomNav from "../components/BottomNav";
 import WalletSection from "../components/user/WalletSection";
 import LoadingButton from "../components/LoadingButton";
+import { toast } from "react-hot-toast";
 
 interface UserDetails {
   firstName: string;
@@ -70,14 +71,30 @@ export default function Profile() {
 
     setSaving(true);
     try {
+      // Check if all required fields are filled
+      const requiredFields = ["firstName", "lastName", "phone", "address"];
+      const missingFields = requiredFields.filter(
+        (field) => !editedDetails[field as keyof UserDetails]
+      );
+
+      if (missingFields.length > 0) {
+        toast.error(
+          `Please fill in all required fields: ${missingFields.join(", ")}`
+        );
+        return;
+      }
+
       await updateDoc(doc(db, "users", user.uid), {
         ...editedDetails,
         lastUpdated: new Date().toISOString(),
+        isProfileComplete: true,
       });
       setUserDetails(editedDetails as UserDetails);
       setIsEditing(false);
+      toast.success("Profile updated successfully");
     } catch (error) {
       console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
     } finally {
       setSaving(false);
     }

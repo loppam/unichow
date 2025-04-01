@@ -49,8 +49,8 @@ function App() {
         <ErrorBoundary>
           <AuthProvider>
             <AdminProvider>
-              <NotificationProvider>
-                <CartProvider>
+              <CartProvider>
+                <NotificationProvider>
                   <Routes>
                     {/* Public routes */}
                     <Route path="/" element={<Welcome />} />
@@ -71,7 +71,7 @@ function App() {
                       path="/verify-email"
                       element={
                         <ProtectedRoute
-                          userType="user"
+                          userType="customer"
                           requireVerification={false}
                         >
                           <EmailVerification />
@@ -105,7 +105,7 @@ function App() {
                     <Route
                       path="/home"
                       element={
-                        <ProtectedRoute userType="user">
+                        <ProtectedRoute userType="customer">
                           <Home />
                         </ProtectedRoute>
                       }
@@ -113,7 +113,7 @@ function App() {
                     <Route
                       path="/cart"
                       element={
-                        <ProtectedRoute userType="user">
+                        <ProtectedRoute userType="customer">
                           <Cart />
                         </ProtectedRoute>
                       }
@@ -121,7 +121,7 @@ function App() {
                     <Route
                       path="/profile"
                       element={
-                        <ProtectedRoute userType="user">
+                        <ProtectedRoute userType="customer">
                           <Profile />
                         </ProtectedRoute>
                       }
@@ -293,8 +293,8 @@ function App() {
                       />
                     </Route>
                   </Routes>
-                </CartProvider>
-              </NotificationProvider>
+                </NotificationProvider>
+              </CartProvider>
             </AdminProvider>
           </AuthProvider>
         </ErrorBoundary>

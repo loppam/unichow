@@ -33,7 +33,8 @@ service cloud.firestore {
       return isAuthenticated() && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'customer';
     }
-        function isRider() {
+
+    function isRider() {
       return isAuthenticated() && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'rider';
     }
@@ -52,10 +53,11 @@ service cloud.firestore {
     }
 
     function isValidRestaurantData() {
-      return request.resource.data.keys().hasAll(['restaurantName', 'email', 'phone']) &&
+      return request.resource.data.keys().hasAll(['restaurantName', 'email', 'phone', 'ownerId']) &&
         request.resource.data.restaurantName is string &&
         request.resource.data.email is string &&
-        request.resource.data.phone is string;
+        request.resource.data.phone is string &&
+        request.resource.data.ownerId is string;
     }
 
     // Add new helper function for payment info validation
@@ -74,7 +76,7 @@ service cloud.firestore {
          path.matches('^riders/[^/]+/verification/.*'));
     }
 
-    // Users collection
+    // Users collection - Base user profile
     match /users/{userId} {
       allow read: if isAuthenticated() && (
         request.auth.uid == userId ||
@@ -83,24 +85,29 @@ service cloud.firestore {
       );
       
       allow create: if 
-        isSuperAdmin() ||  // Allow superadmin to create users
-        (request.auth != null && request.auth.uid == userId);  // Allow self-registration
+        request.auth != null && 
+        request.auth.uid == userId && 
+        request.resource.data.keys().hasAll(['email', 'userType', 'name', 'createdAt', 'lastUpdated']) &&
+        request.resource.data.userType in ['customer', 'restaurant', 'rider'];
       
       allow update: if 
         isSuperAdmin() || 
         (isAuthenticated() && request.auth.uid == userId && (
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['emailVerified', 'lastUpdated']) ||
+            .hasOnly(['emailVerified', 'lastUpdated', 'name', 'phone', 'address']) ||
           request.auth.uid == userId
         ));
         
       allow delete: if isSuperAdmin();
     }
 
-    // Restaurants collection
+    // Restaurants collection - Restaurant specific data
     match /restaurants/{restaurantId} {
       allow read: if true;
-      allow create: if isRestaurantOwner(restaurantId) && isValidRestaurantData();
+      allow create: if 
+        request.auth != null &&
+        request.auth.uid == restaurantId &&
+        isValidRestaurantData();
       allow update: if isAuthenticated() && (
         isRestaurantOwner(restaurantId) ||
         isAdmin()
@@ -170,7 +177,7 @@ service cloud.firestore {
           isRestaurantOwner(restaurantId) &&
           isValidPaymentInfo()
         );
-        allow delete: if false; // Prevent deletion of payment info
+        allow delete: if false;
       }
       
       // Add rules for payment transactions
@@ -187,21 +194,45 @@ service cloud.firestore {
 
     // Orders collection
     match /orders/{orderId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
+      allow read: if isAuthenticated() && (
         request.auth.uid == resource.data.customerId ||
         request.auth.uid == resource.data.riderId ||
-        isRestaurantOwner(resource.data.restaurantId) ||
-        request.auth.token.admin == true ||
-        // Allow updates for rider assignment
+        request.auth.uid == resource.data.restaurantId ||
+        isAdmin() ||
+        isSuperAdmin()
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        // Allow customer to update their own order
+        request.auth.uid == resource.data.customerId ||
+        // Allow rider to update their assigned order
+        request.auth.uid == resource.data.riderId ||
+        // Allow restaurant to update their own orders
+        (request.auth.uid == resource.data.restaurantId && (
+          // Only allow status updates to accepted or ready
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+           (request.resource.data.status == 'accepted' || request.resource.data.status == 'ready')) ||
+          // Allow other updates to their own orders
+          request.auth.uid == resource.data.restaurantId
+        )) ||
+        // Allow admin updates
+        isAdmin() ||
+        isSuperAdmin() ||
+        // Allow system to update payment status
         (
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['riderId', 'status', 'assignedAt', 'updatedAt']) &&
+            .hasOnly(['paymentStatus', 'updatedAt']) &&
+          request.auth.token.admin == true
+        ) ||
+        // Allow system to update rider assignment
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['riderId', 'status', 'assignedAt', 'updatedAt', 'assignmentFailureReason', 'needsRiderAssignment']) &&
           (
             request.resource.data.status == 'assigned' ||
             request.resource.data.status == 'picked_up' ||
-            request.resource.data.status == 'delivered'
+            request.resource.data.status == 'delivered' ||
+            request.resource.data.status == 'assignment_failed'
           )
         )
       );
@@ -243,14 +274,9 @@ service cloud.firestore {
     }
 
     // Admin Settings Collection
-    match /admin/settings {
-      allow read: if true;  // Allow public read access
+    match /admin/settings/{document=**} {
+      allow read: if true;  // Allow public read access to all nested documents
       allow write: if isAdmin() || isSuperAdmin();
-      
-      match /{document=**} {
-        allow read: if isAdmin();
-        allow write: if isSuperAdmin();
-      }
     }
 
     // Admin Analytics Collection
@@ -323,10 +349,24 @@ service cloud.firestore {
       allow write: if false; // Only handled by server
     }
 
+    // Customers collection - Customer specific data
     match /customers/{customerId} {
-      allow read, write: if request.auth != null && request.auth.uid == customerId;
+      allow create: if 
+        request.auth != null && 
+        request.auth.uid == customerId &&
+        get(/databases/$(database)/documents/users/$(customerId)).data.userType == 'customer';
       
-      // Allow reading and writing savedAddresses subcollection
+      allow read: if request.auth != null && (
+        request.auth.uid == customerId || 
+        isAdmin()
+      );
+      
+      allow update: if request.auth != null && (
+        request.auth.uid == customerId ||
+        isAdmin()
+      );
+
+      // Customer's saved addresses
       match /savedAddresses/{addressId} {
         allow read, write: if request.auth != null && request.auth.uid == customerId;
       }
@@ -365,53 +405,108 @@ service cloud.firestore {
       );
     }
 
+    // Riders collection - Rider specific data
     match /riders/{riderId} {
-      allow read: if isAuthenticated();
-      allow create: if request.auth.uid == riderId;
+      allow read: if true;
+      allow create: if 
+        request.auth != null &&
+        request.auth.uid == riderId &&
+        request.resource.data.keys().hasAll(['id', 'userId', 'name', 'email', 'phone', 'vehicleType', 'vehiclePlate', 'status', 'lastActivity', 'assignedOrders', 'completedOrders', 'rating', 'isVerified', 'createdAt', 'updatedAt', 'licenseNumber', 'workingHours', 'emergencyContact', 'emergencyPhone']) &&
+        request.resource.data.id == riderId &&
+        request.resource.data.userId == riderId;
       allow update: if isAuthenticated() && (
         request.auth.uid == riderId ||
-        isAdmin()
+        isAdmin() ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['assignedOrders', 'lastActivity', 'status']) &&
+          (
+            request.resource.data.status == 'available' ||
+            request.resource.data.status == 'busy' ||
+            request.resource.data.status == 'offline'
+          )
+        ) ||
+        // Allow system to update rider's assigned orders
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['assignedOrders', 'lastActivity']) &&
+          request.auth.token.admin == true
+        )
       );
-      
+      allow delete: if isSuperAdmin();
+
+      // Verification subcollection
       match /verification/{verificationDoc} {
         allow read: if isAuthenticated() && (
           request.auth.uid == riderId ||
           isAdmin()
         );
         allow create: if request.auth.uid == riderId;
-        allow update, write: if isAdmin();
+        allow update: if isAdmin() || (
+          request.auth.uid == riderId && 
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'lastUpdated'])
+        );
+        allow delete: if isAdmin();
       }
 
-      // Allow write for rider assignment from orders
-      allow write: if isAuthenticated() && 
-        (request.auth.uid == riderId || 
-         request.auth.token.admin == true ||
-         (
-           // Allow updates for order assignments
-           request.resource.data.diff(resource.data).affectedKeys()
-           .hasOnly(['assignedOrders', 'lastActivity'])
-         ));
+      // Rider's payment info
+      match /private/paymentInfo {
+        allow read: if request.auth != null && request.auth.uid == riderId;
+        allow create, update: if request.auth != null && request.auth.uid == riderId;
+        allow delete: if false; // Prevent deletion of payment info
+      }
     }
 
+    // Wallet and Transaction rules
     match /wallets/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create, update: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isAdmin() ||
+        isSuperAdmin()
+      );
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isAdmin() ||
+        isSuperAdmin() ||
+        // Allow system to update wallet balance
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['balance', 'updatedAt']) &&
+          request.auth.token.admin == true
+        )
+      );
+      allow delete: if false; // Prevent wallet deletion
     }
 
     match /walletTransactions/{transactionId} {
-      allow read: if request.auth != null && 
-        request.auth.uid == resource.data.userId;
-      allow create: if request.auth != null && 
-        request.auth.uid == request.resource.data.userId;
-    }
-
-    match /riders/{riderId}/verification/{verificationDoc} {
-      allow read: if request.auth != null && 
-        (request.auth.uid == riderId || isAdmin());
-      allow write: if isAdmin();
-      allow create: if request.auth.uid == riderId && 
-        isValidS3Path(request.resource.data.s3Path) &&
-        request.resource.data.status == 'pending';
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.userId ||
+        isAdmin() ||
+        isSuperAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.auth.uid == request.resource.data.userId ||
+        isAdmin() ||
+        isSuperAdmin() ||
+        // Allow system to create transactions
+        (
+          request.resource.data.keys().hasAll(['userId', 'amount', 'type', 'status', 'createdAt']) &&
+          request.auth.token.admin == true
+        )
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        isSuperAdmin() ||
+        // Allow system to update transaction status
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'updatedAt']) &&
+          request.auth.token.admin == true
+        )
+      );
+      allow delete: if false; // Prevent transaction deletion
     }
 
     match /users/{userId} {
@@ -420,36 +515,6 @@ service cloud.firestore {
         isAdmin()
       );
       allow update: if isAdmin() || request.auth.uid == userId;
-    }
-
-    // Orders collection
-    match /orders/{orderId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.customerId ||
-        request.auth.uid == resource.data.riderId ||
-        isRestaurantOwner(resource.data.restaurantId) ||
-        request.auth.token.admin == true ||
-        // Allow updates for rider assignment
-        (
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['riderId', 'status', 'assignedAt', 'updatedAt']) &&
-          (
-            request.resource.data.status == 'assigned' ||
-            request.resource.data.status == 'picked_up' ||
-            request.resource.data.status == 'delivered'
-          )
-        )
-      );
-    }
-
-    match /riders/{riderId} {
-      match /private/paymentInfo {
-        allow read: if request.auth != null && request.auth.uid == riderId;
-        allow create, update: if request.auth != null && request.auth.uid == riderId;
-        allow delete: if false; // Prevent deletion of payment info
-      }
     }
 
     // Add specific rules for customers collection
@@ -461,14 +526,35 @@ service cloud.firestore {
       allow update: if request.auth != null && request.auth.uid == customerId;
     }
 
-    // Update riders collection rules
-    match /riders/{riderId} {
-      allow create: if request.auth != null && 
-        request.auth.uid == riderId && 
-        request.resource.data.keys().hasAll([
-          'email', 'name', 'phone', 'vehicleType', 
-          'vehiclePlate', 'status', 'isVerified'
-        ]);
+    // Transactions collection
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Balance documents in private subcollection
+    match /restaurants/{restaurantId}/private/balance {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == restaurantId ||
+        isAdmin()
+      );
+      allow write: if isAdmin();
+    }
+
+    match /riders/{riderId}/private/balance {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == riderId ||
+        isAdmin()
+      );
+      allow write: if isAdmin();
     }
   }
 }

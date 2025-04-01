@@ -108,11 +108,16 @@ export default function Home() {
       return;
     }
 
+    if (!newAddress.location) {
+      toast.error("Please select a landmark");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
       const formattedAddress = {
-        address: `${newAddress.hostelName}(${newAddress.location})`,
+        address: `${newAddress.hostelName} (${newAddress.location})`,
         additionalInstructions: "",
       };
 

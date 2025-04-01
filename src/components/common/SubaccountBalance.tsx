@@ -1,36 +1,42 @@
 import { useState, useEffect, useCallback } from "react";
-import { paystackService } from "../../services/paystackService";
+import { paymentService } from "../../services/paymentService";
 import { RefreshCw } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { Balance } from "../../types/transaction";
 
 interface SubaccountBalanceProps {
   subaccountCode: string;
+  userType: "restaurant" | "rider";
   autoRefreshInterval?: number; // in milliseconds
 }
 
 export default function SubaccountBalance({
   subaccountCode,
+  userType,
   autoRefreshInterval = 300000, // 5 minutes default
 }: SubaccountBalanceProps) {
-  const [balance, setBalance] = useState<number | null>(null);
+  const { user } = useAuth();
+  const [balance, setBalance] = useState<Balance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchBalance = useCallback(async () => {
+    if (!user?.uid) return;
+
     try {
       setRefreshing(true);
-      const balance = await paystackService.getSubaccountBalance(
-        subaccountCode
-      );
-      setBalance(balance);
+      const balanceData = await paymentService.getBalance(user.uid, userType);
+      setBalance(balanceData);
       setError(null);
     } catch (error) {
       setError("Failed to fetch balance");
+      console.error("Error fetching balance:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [subaccountCode]);
+  }, [user?.uid, userType]);
 
   useEffect(() => {
     fetchBalance();
@@ -57,7 +63,31 @@ export default function SubaccountBalance({
       {error ? (
         <div className="text-red-500">{error}</div>
       ) : (
-        <p className="text-2xl font-bold">₦{balance?.toLocaleString() || 0}</p>
+        <div>
+          <p className="text-2xl font-bold">
+            ₦{balance?.availableBalance.toLocaleString() || 0}
+          </p>
+          <div className="mt-4 space-y-2 text-sm text-gray-600">
+            <div className="flex justify-between">
+              <span>Total Received:</span>
+              <span>₦{balance?.totalReceived.toLocaleString() || 0}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Total Fees:</span>
+              <span>₦{balance?.totalFees.toLocaleString() || 0}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Total Withdrawals:</span>
+              <span>₦{balance?.totalWithdrawals.toLocaleString() || 0}</span>
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              Last updated:{" "}
+              {balance?.lastUpdated
+                ? new Date(balance.lastUpdated).toLocaleString()
+                : "Never"}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

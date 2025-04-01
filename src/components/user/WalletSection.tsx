@@ -13,6 +13,7 @@ export default function WalletSection() {
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [amount, setAmount] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const loadWalletBalance = useCallback(async () => {
     try {
@@ -34,26 +35,33 @@ export default function WalletSection() {
 
   const handlePaystackSuccess = async (reference: { reference: string }) => {
     try {
-      // Update wallet balance immediately
+      if (!user?.email) {
+        toast.error("Email is required for wallet funding");
+        return;
+      }
+
       const numAmount = parseFloat(amount);
-      const walletRef = doc(db, "wallets", user!.uid);
+      await walletService.fundWallet(user.uid, numAmount, user.email);
+
+      // Update wallet balance immediately
+      const walletDocRef = doc(db, "wallets", user.uid);
 
       await runTransaction(db, async (transaction) => {
-        const walletDoc = await transaction.get(walletRef);
+        const walletDoc = await transaction.get(walletDocRef);
         const currentBalance = walletDoc.exists()
           ? walletDoc.data().balance
           : 0;
 
         // Update wallet balance
-        transaction.update(walletRef, {
+        transaction.update(walletDocRef, {
           balance: currentBalance + numAmount,
           lastUpdated: new Date().toISOString(),
         });
 
         // Update transaction status
-        const transactionRef = collection(db, "walletTransactions");
-        transaction.set(doc(transactionRef), {
-          userId: user!.uid,
+        const transactionRef = doc(collection(db, "walletTransactions"));
+        transaction.set(transactionRef, {
+          userId: user.uid,
           type: "credit",
           amount: numAmount,
           description: "Wallet funding",
@@ -90,27 +98,27 @@ export default function WalletSection() {
   const initializePaystack = usePaystackPayment(config);
 
   const handleFundWallet = async () => {
-    if (!user?.email || !amount) return;
+    if (!amount || isProcessing) return;
+
     try {
+      setIsProcessing(true);
       const numAmount = parseFloat(amount);
       if (isNaN(numAmount) || numAmount <= 0) {
         toast.error("Please enter a valid amount");
         return;
       }
 
-      const { reference } = await walletService.fundWallet(
-        user.uid,
-        numAmount,
-        user.email
-      );
-
       initializePaystack({
         onSuccess: handlePaystackSuccess,
-        onClose: () => toast.error("Transaction cancelled"),
+        onClose: () => {
+          toast.error("Transaction cancelled");
+          setIsProcessing(false);
+        },
       });
     } catch (error) {
       console.error("Error funding wallet:", error);
-      toast.error("Failed to fund wallet");
+      toast.error("Failed to process payment");
+      setIsProcessing(false);
     }
   };
 
@@ -142,10 +150,10 @@ export default function WalletSection() {
 
         <button
           onClick={handleFundWallet}
-          className="w-full bg-primary text-black py-2 px-4 rounded hover:bg-primary-dark transition-colors border border-black"
-          disabled={loading || !amount}
+          className="w-full bg-primary text-black py-2 px-4 rounded hover:bg-primary-dark transition-colors border border-black disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={loading || !amount || isProcessing}
         >
-          Fund Wallet
+          {isProcessing ? "Processing..." : "Fund Wallet"}
         </button>
       </div>
     </div>

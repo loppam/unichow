@@ -4,12 +4,14 @@ import { useAuth } from "../contexts/AuthContext";
 import { ClipboardList, Clock, CheckCircle, ShoppingBag } from "lucide-react";
 import RestaurantNavigation from "../components/RestaurantNavigation";
 import { orderService } from "../services/orderService";
+import { firestoreService } from "../services/firestoreService";
 import { Order } from "../types/order";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useNavigate } from "react-router-dom";
 import { Timestamp } from "firebase/firestore";
 import { riderAssignmentService } from "../services/riderAssignmentService";
+import { toast } from "react-hot-toast";
 
 export default function RestaurantOrders() {
   const { user } = useAuth();
@@ -20,21 +22,17 @@ export default function RestaurantOrders() {
     "pending"
   );
   const navigate = useNavigate();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     if (!user?.uid) return;
 
     // Subscribe to real-time order updates
-    const unsubscribe = orderService.subscribeToNewOrders(
+    const unsubscribe = firestoreService.subscribeToNewOrders(
       user.uid,
       (updatedOrders) => {
-        // Filter orders by restaurant ID and relevant statuses
-        const filteredOrders = updatedOrders.filter(
-          (order) =>
-            order.restaurantId === user.uid &&
-            ["pending", "accepted", "ready", "delivered"].includes(order.status)
-        );
-        setOrders(filteredOrders);
+        // Update orders state with the latest data
+        setOrders(updatedOrders);
         setLoading(false);
       }
     );
@@ -43,15 +41,10 @@ export default function RestaurantOrders() {
     return () => unsubscribe();
   }, [user]);
 
-  const groupedOrders = {
-    pending: orders.filter((order) => order.status === "pending"),
-    accepted: orders.filter((order) =>
-      ["accepted", "preparing"].includes(order.status)
-    ),
-    ready: orders.filter((order) =>
-      ["ready", "assigned", "picked_up", "delivered"].includes(order.status)
-    ),
-  };
+  // Remove the groupedOrders object and use direct filtering
+  const pendingOrders = orders.filter((order) => order.status === "pending");
+  const acceptedOrders = orders.filter((order) => order.status === "accepted");
+  const readyOrders = orders.filter((order) => order.status === "ready");
 
   const getStatusColor = (status: Order["status"]) => {
     switch (status) {
@@ -72,11 +65,12 @@ export default function RestaurantOrders() {
     orderId: string,
     newStatus: Order["status"]
   ) => {
+    setIsProcessing(true);
     try {
       const orderRef = doc(db, "orders", orderId);
       await updateDoc(orderRef, {
         status: newStatus,
-        updatedAt: new Date().toISOString(),
+        updatedAt: serverTimestamp(),
       });
 
       // If the order is being accepted, trigger rider assignment
@@ -89,10 +83,12 @@ export default function RestaurantOrders() {
         }
       }
 
-      // Local state will be updated automatically by the subscription
-    } catch (err) {
-      console.error("Error updating order status:", err);
-      // Optionally add error handling UI
+      toast.success("Order status updated successfully");
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      toast.error("Failed to update order status");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -118,9 +114,7 @@ export default function RestaurantOrders() {
                   activeTab === "pending" ? "w-4 h-4" : "w-3.5 h-3.5"
                 }`}
               />
-              <span className="truncate">
-                Pending ({groupedOrders.pending.length})
-              </span>
+              <span className="truncate">Pending ({pendingOrders.length})</span>
             </button>
             <button
               onClick={() => setActiveTab("accepted")}
@@ -136,7 +130,7 @@ export default function RestaurantOrders() {
                 }`}
               />
               <span className="truncate">
-                Accepted ({groupedOrders.accepted.length})
+                Accepted ({acceptedOrders.length})
               </span>
             </button>
             <button
@@ -152,9 +146,7 @@ export default function RestaurantOrders() {
                   activeTab === "ready" ? "w-4 h-4" : "w-3.5 h-3.5"
                 }`}
               />
-              <span className="truncate">
-                Ready ({groupedOrders.ready.length})
-              </span>
+              <span className="truncate">Ready ({readyOrders.length})</span>
             </button>
           </div>
         </div>
@@ -165,83 +157,199 @@ export default function RestaurantOrders() {
           <div className="text-center py-8">Loading orders...</div>
         ) : error ? (
           <div className="text-center py-8 text-red-600">{error}</div>
-        ) : groupedOrders[activeTab].length === 0 ? (
+        ) : pendingOrders.length === 0 &&
+          acceptedOrders.length === 0 &&
+          readyOrders.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <ClipboardList className="w-12 h-12 mx-auto mb-2 text-gray-400" />
             <p>No {activeTab} orders</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {groupedOrders[activeTab].map((order) => (
-              <div
-                key={order.id}
-                className="bg-white rounded-lg shadow-sm p-4 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => navigate(`/restaurant/orders/${order.id}`)}
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="font-semibold">
-                      Order #{order.id.slice(-6)}
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      {new Date(
-                        order.createdAt instanceof Timestamp
-                          ? order.createdAt.toDate()
-                          : order.createdAt
-                      ).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
-                        order.status
-                      )}`}
-                    >
-                      {order.status.charAt(0).toUpperCase() +
-                        order.status.slice(1)}
-                    </span>
-                    {activeTab === "pending" && (
-                      <button
-                        onClick={() => handleStatusUpdate(order.id, "accepted")}
-                        className="px-3 py-1 bg-blue-500 text-white rounded-full text-sm"
+            {activeTab === "pending" &&
+              pendingOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white rounded-lg shadow-sm p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => navigate(`/restaurant/orders/${order.id}`)}
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="font-semibold">
+                        Order #{order.id.slice(-6)}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {new Date(
+                          order.createdAt instanceof Timestamp
+                            ? order.createdAt.toDate()
+                            : order.createdAt
+                        ).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
+                          order.status
+                        )}`}
                       >
-                        Accept
-                      </button>
-                    )}
-                    {activeTab === "accepted" && (
+                        {order.status.charAt(0).toUpperCase() +
+                          order.status.slice(1)}
+                      </span>
                       <button
-                        onClick={() => handleStatusUpdate(order.id, "ready")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStatusUpdate(order.id, "accepted");
+                        }}
+                        disabled={isProcessing}
+                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
+                      >
+                        {isProcessing ? "Updating..." : "Accept Order"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium mb-2">Order Items</h4>
+                    {order.packs?.map((pack) => (
+                      <div key={pack.id}>
+                        <div className="text-sm text-gray-600 mb-2">
+                          {pack.restaurantName}
+                        </div>
+                        {pack.items.map((item, index) => (
+                          <div
+                            key={index}
+                            className="flex justify-between text-sm mb-1"
+                          >
+                            <span>
+                              {item.quantity}x {item.name}
+                            </span>
+                            <span>₦{item.price.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            {activeTab === "accepted" &&
+              acceptedOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white rounded-lg shadow-sm p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => navigate(`/restaurant/orders/${order.id}`)}
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="font-semibold">
+                        Order #{order.id.slice(-6)}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {new Date(
+                          order.createdAt instanceof Timestamp
+                            ? order.createdAt.toDate()
+                            : order.createdAt
+                        ).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
+                          order.status
+                        )}`}
+                      >
+                        {order.status.charAt(0).toUpperCase() +
+                          order.status.slice(1)}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStatusUpdate(order.id, "ready");
+                        }}
                         className="px-3 py-1 bg-green-500 text-white rounded-full text-sm"
                       >
                         Mark Ready
                       </button>
-                    )}
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium mb-2">Order Items</h4>
+                    {order.packs?.map((pack) => (
+                      <div key={pack.id}>
+                        <div className="text-sm text-gray-600 mb-2">
+                          {pack.restaurantName}
+                        </div>
+                        {pack.items.map((item, index) => (
+                          <div
+                            key={index}
+                            className="flex justify-between text-sm mb-1"
+                          >
+                            <span>
+                              {item.quantity}x {item.name}
+                            </span>
+                            <span>₦{item.price.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
                   </div>
                 </div>
-
-                <div className="border-t pt-4">
-                  <h4 className="font-medium mb-2">Order Items</h4>
-                  {order.packs?.map((pack) => (
-                    <div key={pack.id}>
-                      <div className="text-sm text-gray-600 mb-2">
-                        {pack.restaurantName}
-                      </div>
-                      {pack.items.map((item, index) => (
-                        <div
-                          key={index}
-                          className="flex justify-between text-sm mb-1"
-                        >
-                          <span>
-                            {item.quantity}x {item.name}
-                          </span>
-                          <span>₦{item.price.toFixed(2)}</span>
-                        </div>
-                      ))}
+              ))}
+            {activeTab === "ready" &&
+              readyOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white rounded-lg shadow-sm p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => navigate(`/restaurant/orders/${order.id}`)}
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="font-semibold">
+                        Order #{order.id.slice(-6)}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {new Date(
+                          order.createdAt instanceof Timestamp
+                            ? order.createdAt.toDate()
+                            : order.createdAt
+                        ).toLocaleString()}
+                      </p>
                     </div>
-                  ))}
+                    <div className="flex flex-col gap-2">
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
+                          order.status
+                        )}`}
+                      >
+                        {order.status.charAt(0).toUpperCase() +
+                          order.status.slice(1)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium mb-2">Order Items</h4>
+                    {order.packs?.map((pack) => (
+                      <div key={pack.id}>
+                        <div className="text-sm text-gray-600 mb-2">
+                          {pack.restaurantName}
+                        </div>
+                        {pack.items.map((item, index) => (
+                          <div
+                            key={index}
+                            className="flex justify-between text-sm mb-1"
+                          >
+                            <span>
+                              {item.quantity}x {item.name}
+                            </span>
+                            <span>₦{item.price.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         )}
       </div>

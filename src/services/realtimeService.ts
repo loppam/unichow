@@ -1,15 +1,4 @@
-import {
-  collection,
-  doc,
-  query,
-  limit,
-  onSnapshot,
-  orderBy,
-  where,
-  DocumentSnapshot,
-  QuerySnapshot,
-} from "firebase/firestore";
-import { db } from "../firebase/config";
+import { firestoreService } from "./firestoreService";
 import { Order, OrderStatus, UserOrder } from "../types/order";
 import { MenuItem } from "../types/menu";
 import { Restaurant } from "../types/restaurant";
@@ -50,19 +39,18 @@ const mapOrderData = (id: string, data: OrderData): Order => ({
 export const realtimeService = {
   subscribeToOrder(
     orderId: string,
-    callback: OrderCallback
-  ): UnsubscribeFunction {
-    return onSnapshot(
-      doc(db, "orders", orderId),
-      (snapshot: DocumentSnapshot) => {
-        if (snapshot.exists()) {
-          const orderData = snapshot.data() as OrderData;
-          callback(mapOrderData(snapshot.id, orderData));
+    callback: OrderCallback,
+    onError?: (error: Error) => void
+  ) {
+    return firestoreService.subscribeToDocument(
+      "orders",
+      orderId,
+      (doc) => {
+        if (doc) {
+          callback(doc as Order);
         }
       },
-      (error) => {
-        console.error("Error subscribing to order:", error);
-      }
+      onError
     );
   },
 
@@ -72,15 +60,15 @@ export const realtimeService = {
     callback: OrdersCallback,
     limitCount: number = 50
   ): UnsubscribeFunction {
-    const q = query(
-      collection(db, "orders"),
-      where("restaurantId", "==", restaurantId),
-      where("status", "in", statuses),
-      orderBy("createdAt", "desc"),
-      limit(limitCount)
+    const q = firestoreService.query(
+      firestoreService.collection("orders"),
+      firestoreService.where("restaurantId", "==", restaurantId),
+      firestoreService.where("status", "in", statuses),
+      firestoreService.orderBy("createdAt", "desc"),
+      firestoreService.limit(limitCount)
     );
 
-    return onSnapshot(q, (snapshot: QuerySnapshot) => {
+    return firestoreService.subscribeToQuery(q, (snapshot) => {
       const orders = snapshot.docs.map((doc) =>
         mapOrderData(doc.id, doc.data() as OrderData)
       );
@@ -93,14 +81,14 @@ export const realtimeService = {
     callback: OrdersCallback,
     limitCount: number = 10
   ): UnsubscribeFunction {
-    const q = query(
-      collection(db, "orders"),
-      where("customerId", "==", customerId),
-      orderBy("createdAt", "desc"),
-      limit(limitCount)
+    const q = firestoreService.query(
+      firestoreService.collection("orders"),
+      firestoreService.where("customerId", "==", customerId),
+      firestoreService.orderBy("createdAt", "desc"),
+      firestoreService.limit(limitCount)
     );
 
-    return onSnapshot(q, (snapshot: QuerySnapshot) => {
+    return firestoreService.subscribeToQuery(q, (snapshot) => {
       const orders = snapshot.docs.map((doc) =>
         mapOrderData(doc.id, doc.data() as OrderData)
       );
@@ -109,12 +97,12 @@ export const realtimeService = {
   },
 
   subscribeToOrders(restaurantId: string, callback: (orders: Order[]) => void) {
-    const q = query(
-      collection(db, "orders"),
-      where("restaurantId", "==", restaurantId),
-      orderBy("createdAt", "desc")
+    const q = firestoreService.query(
+      firestoreService.collection("orders"),
+      firestoreService.where("restaurantId", "==", restaurantId),
+      firestoreService.orderBy("createdAt", "desc")
     );
-    return onSnapshot(q, (snapshot) => {
+    return firestoreService.subscribeToQuery(q, (snapshot) => {
       const orders = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -124,14 +112,14 @@ export const realtimeService = {
   },
 
   subscribeToUserOrders(userId: string, callback: (orders: Order[]) => void) {
-    const ordersRef = collection(db, "orders");
-    const q = query(
+    const ordersRef = firestoreService.collection("orders");
+    const q = firestoreService.query(
       ordersRef,
-      where("customerId", "==", userId),
-      orderBy("createdAt", "desc")
+      firestoreService.where("customerId", "==", userId),
+      firestoreService.orderBy("createdAt", "desc")
     );
 
-    return onSnapshot(q, (snapshot) => {
+    return firestoreService.subscribeToQuery(q, (snapshot) => {
       const orders = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -141,30 +129,30 @@ export const realtimeService = {
   },
 
   subscribeToMenu(restaurantId: string, callback: (items: MenuItem[]) => void) {
-    const q = query(
-      collection(db, "restaurants", restaurantId, "menu"),
-      orderBy("updatedAt", "desc")
+    return firestoreService.subscribeToCollection(
+      `restaurants/${restaurantId}/menu`,
+      [firestoreService.orderBy("updatedAt", "desc")],
+      (docs) => {
+        const items = docs.map((doc) => ({
+          id: doc.id,
+          ...doc,
+        })) as MenuItem[];
+        callback(items);
+      }
     );
-    return onSnapshot(q, (snapshot) => {
-      const items = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as MenuItem[];
-      callback(items);
-    });
   },
 
   subscribeToRestaurants(callback: (restaurants: Restaurant[]) => void) {
-    const q = query(
-      collection(db, "restaurants"),
-      where("status", "!=", "deleted")
+    return firestoreService.subscribeToCollection(
+      "restaurants",
+      [firestoreService.where("status", "!=", "deleted")],
+      (docs) => {
+        const restaurants = docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Restaurant[];
+        callback(restaurants);
+      }
     );
-    return onSnapshot(q, (snapshot) => {
-      const restaurants = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Restaurant[];
-      callback(restaurants);
-    });
   },
 };

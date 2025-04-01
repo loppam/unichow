@@ -3,6 +3,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { paymentService } from "../../services/paymentService";
 import { RestaurantPaymentInfo, RestaurantData } from "../../types/restaurant";
 import { toast } from "react-hot-toast";
+import SubaccountBalance from "../common/SubaccountBalance";
 
 interface PaymentSetupProps {
   data: RestaurantData;
@@ -27,8 +28,10 @@ export default function PaymentSetup({ data }: PaymentSetupProps) {
   });
 
   useEffect(() => {
-    loadBanks();
-  }, []);
+    if (!data.paymentInfo?.paystackSubaccountCode) {
+      loadBanks();
+    }
+  }, [data.paymentInfo]);
 
   const loadBanks = async () => {
     try {
@@ -38,6 +41,11 @@ export default function PaymentSetup({ data }: PaymentSetupProps) {
       setError("Failed to load banks");
       toast.error("Failed to load bank list");
     }
+  };
+
+  const getBankName = (bankCode: string) => {
+    const bank = banks.find((b) => b.code === bankCode);
+    return bank?.name || bankCode;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,8 +92,65 @@ export default function PaymentSetup({ data }: PaymentSetupProps) {
     }
   };
 
+  // If payment info exists, show read-only view
+  if (data.paymentInfo?.paystackSubaccountCode) {
+    return (
+      <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-sm">
+        <div className="mb-6">
+          <SubaccountBalance
+            subaccountCode={data.paymentInfo.paystackSubaccountCode}
+            userType="restaurant"
+            autoRefreshInterval={300000}
+          />
+        </div>
+
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold mb-4">Payment Information</h2>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <p className="text-blue-800 text-sm">
+              Your payment information is locked for security reasons. To make
+              any changes, please contact our support team.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex justify-between items-center py-2 border-b">
+            <span className="text-gray-600">Bank Name</span>
+            <span className="font-medium">
+              {getBankName(data.paymentInfo.bankName)}
+            </span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b">
+            <span className="text-gray-600">Account Number</span>
+            <span className="font-medium">
+              {data.paymentInfo.accountNumber}
+            </span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b">
+            <span className="text-gray-600">Account Name</span>
+            <span className="font-medium">{data.paymentInfo.accountName}</span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b">
+            <span className="text-gray-600">Settlement Schedule</span>
+            <span className="font-medium capitalize">
+              {data.paymentInfo.settlementSchedule}
+            </span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b">
+            <span className="text-gray-600">Last Updated</span>
+            <span className="text-sm text-gray-500">
+              {new Date(data.paymentInfo.lastUpdated).toLocaleDateString()}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Original form for initial setup
   return (
-    <div className="max-w-md mx-auto p-6">
+    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-sm">
       <h2 className="text-xl font-semibold mb-4">Payment Setup</h2>
 
       {error && (

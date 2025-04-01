@@ -23,8 +23,7 @@ export type OrderStatus =
   | "picked_up"
   | "delivered"
   | "cancelled"
-  | "assigned"
-  | "picked_up";
+  | "assignment_failed";
 
 export type PaymentMethod = "card" | "cash";
 export type PaymentStatus = "pending" | "completed" | "failed" | "refunded";
@@ -52,7 +51,7 @@ export interface Order {
   serviceFee: number;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
-  paymentStatus: PaymentStatus;
+  paymentStatus: "pending" | "paid" | "failed";
   createdAt: Timestamp | string;
   updatedAt: string;
   acceptedAt?: string;
@@ -69,6 +68,17 @@ export interface Order {
   riderId?: string;
   restaurantName: string;
   deliveryConfirmationCode: string;
+  paymentReference?: string;
+  restaurantPaymentInfo: {
+    paystackSubaccountCode: string;
+  };
+  riderPaymentInfo?: {
+    paystackSubaccountCode: string;
+  };
+  assignedAt?: string;
+  pickedUpAt?: string;
+  needsRiderAssignment?: boolean;
+  assignmentFailureReason?: string;
 }
 
 export interface OrderNotification {

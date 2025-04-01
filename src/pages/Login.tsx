@@ -5,7 +5,6 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import Logo from "../components/Logo";
 
-
 export default function Login() {
   const location = useLocation();
   const [email, setEmail] = useState("");
@@ -20,7 +19,11 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
 
       // Retry Firestore query with exponential backoff
       let delay = 1000;
@@ -29,15 +32,19 @@ export default function Login() {
 
       while (attempts > 0) {
         try {
-          const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+          const userDoc = await getDoc(
+            doc(db, "users", userCredential.user.uid)
+          );
           userData = userDoc.data();
           break;
         } catch (firestoreError) {
           attempts--;
           if (attempts === 0) {
-            throw new Error("Unable to verify account. Please check your internet connection.");
+            throw new Error(
+              "Unable to verify account. Please check your internet connection."
+            );
           }
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delay));
           delay *= 2;
         }
       }
@@ -55,10 +62,12 @@ export default function Login() {
       // Reload user to get latest email verification status
       await userCredential.user.reload();
       const updatedUser = auth.currentUser;
-      
+
       // Check user type first
       if (userData.userType === "restaurant") {
-        const restaurantDoc = await getDoc(doc(db, "restaurants", userCredential.user.uid));
+        const restaurantDoc = await getDoc(
+          doc(db, "restaurants", userCredential.user.uid)
+        );
         if (!restaurantDoc.exists()) {
           throw new Error("Restaurant profile not found");
         }
@@ -70,16 +79,29 @@ export default function Login() {
         }
 
         if (!userData.isApproved) {
-          if (userData.status === 'rejected') {
+          if (userData.status === "rejected") {
             await auth.signOut();
-            throw new Error("Your restaurant account has been rejected. Please contact support for more information.");
+            throw new Error(
+              "Your restaurant account has been rejected. Please contact support for more information."
+            );
           }
           await auth.signOut();
-          throw new Error("Your restaurant account is pending approval. We'll notify you via email once approved.");
+          throw new Error(
+            "Your restaurant account is pending approval. We'll notify you via email once approved."
+          );
         }
-        navigate("/restaurant-dashboard");
+
+        // Check if bank account is added
+        const restaurantData = restaurantDoc.data();
+        if (!restaurantData.paymentInfo?.paystackSubaccountCode) {
+          navigate("/restaurant-settings");
+        } else {
+          navigate("/restaurant-dashboard");
+        }
       } else if (userData.userType === "rider") {
-        const riderDoc = await getDoc(doc(db, "riders", userCredential.user.uid));
+        const riderDoc = await getDoc(
+          doc(db, "riders", userCredential.user.uid)
+        );
         if (!riderDoc.exists()) {
           throw new Error("Rider profile not found");
         }
@@ -96,27 +118,47 @@ export default function Login() {
             "Your rider account is pending verification. We'll review your documents and notify you via email once verified. This usually takes 1-2 business days."
           );
         }
-        
-        navigate("/rider-dashboard");
+
+        // Check if bank account is added
+        const riderData = riderDoc.data();
+        if (!riderData.paymentInfo?.paystackSubaccountCode) {
+          navigate("/rider-settings");
+        } else {
+          navigate("/rider-dashboard");
+        }
       } else {
         // Regular user
         if (!updatedUser?.emailVerified) {
           navigate("/verify-email");
           return;
         }
-        navigate("/home");
+
+        // Check if profile is complete
+        const customerDoc = await getDoc(
+          doc(db, "customers", userCredential.user.uid)
+        );
+        if (customerDoc.exists()) {
+          const customerData = customerDoc.data();
+          if (!customerData.isProfileComplete) {
+            navigate("/profile");
+          } else {
+            navigate("/home");
+          }
+        } else {
+          navigate("/profile");
+        }
       }
     } catch (err) {
       console.error("Login error:", err);
-      
+
       if (err instanceof Error) {
-        if (err.message.includes('auth/invalid-credential')) {
-          setError('Invalid email or password');
+        if (err.message.includes("auth/invalid-credential")) {
+          setError("Invalid email or password");
           await auth.signOut();
-        } else if (err.message.includes('auth/too-many-requests')) {
-          setError('Too many failed attempts. Please try again later');
+        } else if (err.message.includes("auth/too-many-requests")) {
+          setError("Too many failed attempts. Please try again later");
           await auth.signOut();
-        } else if (err.message.includes('auth/')) {
+        } else if (err.message.includes("auth/")) {
           setError(err.message);
           await auth.signOut();
         } else {
@@ -124,7 +166,7 @@ export default function Login() {
           setError(err.message);
         }
       } else {
-        setError('An unexpected error occurred');
+        setError("An unexpected error occurred");
       }
     } finally {
       setLoading(false);
@@ -181,7 +223,10 @@ export default function Login() {
 
         <p className="text-center text-gray-600 mt-6">
           Don't have an account?{" "}
-          <Link to="/register" className="text-black font-medium hover:underline">
+          <Link
+            to="/register"
+            className="text-black font-medium hover:underline"
+          >
             Register
           </Link>
         </p>

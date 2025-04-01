@@ -6,7 +6,7 @@ import { CartItem, useCart } from "../contexts/CartContext";
 import { toast } from "react-hot-toast";
 import { orderService } from "../services/orderService";
 import { useAuth } from "../contexts/AuthContext";
-import { Address, Order } from "../types/order";
+import { Address, Order, OrderStatus, PaymentMethod } from "../types/order";
 import { customerService } from "../services/customerService";
 import {
   getDoc,
@@ -17,6 +17,8 @@ import {
   getDocs,
   updateDoc,
   serverTimestamp,
+  orderBy,
+  limit,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { adminSettingsService } from "../services/adminSettingsService";
@@ -81,19 +83,6 @@ export default function Cart() {
     baseDeliveryFee: 500,
   });
   const [paymentStep, setPaymentStep] = useState<"cart" | "payment">("cart");
-  const initializePayment = usePaystackPayment({
-    publicKey: PAYSTACK_PUBLIC_KEY,
-    email: "",
-    amount: 0,
-    metadata: {
-      custom_fields: [],
-    },
-    split: {
-      type: "percentage",
-      bearer_type: "account",
-      subaccounts: [],
-    },
-  });
   const [restaurantData, setRestaurantData] = useState<RestaurantData | null>(
     null
   );
@@ -110,6 +99,7 @@ export default function Cart() {
     location: LOCATIONS[0],
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const calculatePackTotal = (items: CartItem[]) => {
     return items.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -142,6 +132,17 @@ export default function Cart() {
   const calculateTotal = () => {
     return calculateSubtotal() + calculateDeliveryFee() + calculateServiceFee();
   };
+
+  // Initialize Paystack payment
+  const initializePayment = usePaystackPayment({
+    publicKey: PAYSTACK_PUBLIC_KEY,
+    email: user?.email || "",
+    amount: Math.round(calculateTotal() * 100), // Convert to kobo
+    currency: "NGN",
+    metadata: {
+      custom_fields: [],
+    },
+  });
 
   // Load saved addresses
   useEffect(() => {
@@ -193,46 +194,55 @@ export default function Cart() {
     try {
       if (!user) return;
 
+      // Fetch restaurant data if not already loaded
+      let currentRestaurantData = restaurantData;
+      if (!currentRestaurantData) {
+        const restaurantDoc = await getDoc(
+          doc(db, "restaurants", packs[0].restaurantId)
+        );
+        if (!restaurantDoc.exists()) throw new Error("Restaurant not found");
+        currentRestaurantData = restaurantDoc.data() as RestaurantData;
+        if (!currentRestaurantData.paymentInfo?.paystackSubaccountCode) {
+          throw new Error("Restaurant payment information is missing");
+        }
+        setRestaurantData(currentRestaurantData);
+      }
+
       const paymentRef = reference as unknown as PaystackResponse;
       const newOrder = {
         customerId: user.uid,
         restaurantId: packs[0].restaurantId,
-        packs: packs.map((pack) => ({
-          id: pack.id,
-          restaurantName: pack.restaurantName,
-          items: pack.items.map((item) => ({
-            id: item.id,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            specialInstructions: item.specialInstructions || "",
-          })),
-        })),
         customerName:
           userData?.firstName || userData?.lastName
             ? `${userData?.firstName || ""} ${userData?.lastName || ""}`
             : "Anonymous",
         customerPhone: userData?.phone || "",
-        deliveryAddress: {
-          address: currentAddress.address,
-          additionalInstructions: currentAddress.additionalInstructions || "",
-        },
+        customerEmail: user.email || "",
+        customerAddress: currentAddress.address,
+        items: packs.flatMap((pack) => pack.items),
         total: calculateTotal(),
         subtotal: calculateSubtotal(),
         deliveryFee: calculateDeliveryFee(),
         serviceFee: calculateServiceFee(),
-        deliveryConfirmationCode: generateDeliveryCode(),
-        paymentMethod: "paystack",
-        paymentStatus: "completed",
-        paymentReference: paymentRef.reference,
-        status: "pending",
+        status: "pending" as OrderStatus,
+        paymentMethod: "paystack" as PaymentMethod,
+        paymentStatus: "paid" as "pending" | "paid" | "failed",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        riderId: null,
-        assignedAt: null,
+        deliveryAddress: {
+          address: currentAddress.address,
+          additionalInstructions: currentAddress.additionalInstructions || "",
+        },
+        restaurantName: packs[0].restaurantName,
+        deliveryConfirmationCode: generateDeliveryCode(),
+        restaurantPaymentInfo: {
+          paystackSubaccountCode:
+            currentRestaurantData.paymentInfo.paystackSubaccountCode,
+        },
+        paymentReference: paymentRef.reference,
       };
 
-      const orderId = await orderService.createOrder(user.uid, newOrder);
+      const orderId = await orderService.createOrder(newOrder);
 
       // Add rider assignment after order creation
       try {
@@ -315,40 +325,78 @@ export default function Cart() {
   };
 
   const handlePayment = async () => {
-    if (!user) {
-      toast.error("Please log in to continue");
-      return;
-    }
-
-    if (!currentAddress.address) {
-      toast.error("Please enter a delivery address");
-      return;
-    }
-
+    setIsProcessing(true);
     try {
-      setIsInitializing(true);
+      if (!user) {
+        toast.error("Please log in to continue");
+        return;
+      }
+
+      if (!user.email) {
+        toast.error("Email address is required for payment");
+        return;
+      }
+
+      if (!currentAddress.address) {
+        toast.error("Please enter a delivery address");
+        return;
+      }
+
+      let currentRestaurantData = restaurantData;
 
       // Fetch restaurant data first
-      if (!restaurantData) {
+      if (!currentRestaurantData) {
         const restaurantDoc = await getDoc(
           doc(db, "restaurants", packs[0].restaurantId)
         );
         if (!restaurantDoc.exists()) throw new Error("Restaurant not found");
-        const data = restaurantDoc.data() as RestaurantData;
-        if (!data.paymentInfo?.paystackSubaccountCode) {
+        currentRestaurantData = restaurantDoc.data() as RestaurantData;
+        if (!currentRestaurantData.paymentInfo?.paystackSubaccountCode) {
           throw new Error("Restaurant payment information is missing");
         }
-        setRestaurantData(data);
+        setRestaurantData(currentRestaurantData);
       }
 
       await checkRiderAvailability();
-      // Initialize Paystack payment
-      const config = getPaystackConfig(restaurantData!);
-      initializePayment({
-        ...config,
+
+      const total = calculateTotal();
+      const amount = Math.round(total * 100); // Convert to kobo
+
+      // Initialize payment with all required parameters
+      const config = {
+        publicKey: PAYSTACK_PUBLIC_KEY,
+        email: user.email,
+        amount,
+        currency: "NGN",
+        metadata: {
+          custom_fields: [
+            {
+              display_name: "Customer Name",
+              variable_name: "customer_name",
+              value:
+                userData?.firstName || userData?.lastName
+                  ? `${userData?.firstName || ""} ${userData?.lastName || ""}`
+                  : "Anonymous",
+            },
+          ],
+        },
+        split: {
+          type: "percentage",
+          bearer_type: "account",
+          subaccounts: [
+            {
+              subaccount:
+                currentRestaurantData.paymentInfo.paystackSubaccountCode,
+              share: Math.floor((calculateSubtotal() / total) * 100),
+            },
+          ],
+        },
         onSuccess: handlePaystackSuccess,
         onClose: handlePaystackClose,
-      });
+      };
+
+      // Call initializePayment with the complete config
+      initializePayment(config);
     } catch (error) {
       console.error("Error preparing payment:", error);
       toast.error(
@@ -356,6 +404,7 @@ export default function Cart() {
       );
     } finally {
       setIsInitializing(false);
+      setIsProcessing(false);
     }
   };
 
@@ -430,15 +479,14 @@ export default function Cart() {
   // Move the fetchDeliverySettings to a separate function
   const fetchDeliverySettings = async () => {
     try {
-      const settings = await adminSettingsService.getSettings();
-      if (settings?.delivery) {
-        setDeliverySettings({
-          freeDeliveryThreshold: settings.delivery.freeDeliveryThreshold,
-          baseDeliveryFee: settings.delivery.baseDeliveryFee,
-        });
-      }
+      const settings = await adminSettingsService.getDeliverySettings();
+      setDeliverySettings({
+        freeDeliveryThreshold: settings.freeDeliveryThreshold,
+        baseDeliveryFee: settings.baseDeliveryFee,
+      });
     } catch (error) {
       console.error("Error fetching delivery settings:", error);
+      toast.error("Error fetching delivery settings. Please try again later.");
     }
   };
 
@@ -452,15 +500,21 @@ export default function Cart() {
       throw new Error("Missing required payment information");
     }
 
-    const total = calculateTotal();
+    if (!restaurantData.paymentInfo?.paystackSubaccountCode) {
+      throw new Error("Restaurant payment information is not set up");
+    }
+
+    const subtotal = calculateSubtotal(); // Meal cost
     const deliveryFee = calculateDeliveryFee();
-    const serviceFee = calculateServiceFee(); // 10% of subtotal
+    const serviceFee = calculateServiceFee(); // 10% of meal cost
+    const total = subtotal + deliveryFee + serviceFee;
     const amount = Math.round(total * 100);
 
     // Calculate percentages for split
-    const platformShare = Math.floor((serviceFee / total) * 100); // Platform gets service fee
-    const deliveryShare = Math.floor((deliveryFee / total) * 100); // Rider gets delivery fee
-    const restaurantShare = 100 - platformShare - deliveryShare; // Restaurant gets the rest
+    // Restaurant gets 100% of meal cost
+    const restaurantShare = Math.floor((subtotal / total) * 100);
+    // Platform gets the rest (service fee + delivery fee)
+    const platformShare = 100 - restaurantShare;
 
     const baseConfig = {
       key: PAYSTACK_PUBLIC_KEY,
@@ -497,15 +551,6 @@ export default function Cart() {
     };
   };
 
-  useEffect(() => {
-    if (
-      restaurantData &&
-      !restaurantData?.paymentInfo?.paystackSubaccountCode
-    ) {
-      toast.error("Restaurant payment information is missing");
-    }
-  }, [restaurantData]);
-
   // Add useEffect to fetch user data
   useEffect(() => {
     const fetchUserData = async () => {
@@ -538,8 +583,49 @@ export default function Cart() {
     }
   }, [user, loadWallet]);
 
+  // Add useEffect to fetch restaurant data when needed
+  useEffect(() => {
+    const fetchRestaurantData = async () => {
+      if (!packs[0]?.restaurantId) return;
+
+      try {
+        const restaurantDoc = await getDoc(
+          doc(db, "restaurants", packs[0].restaurantId)
+        );
+        if (!restaurantDoc.exists()) {
+          toast.error("Restaurant not found");
+          return;
+        }
+        const data = restaurantDoc.data() as RestaurantData;
+        setRestaurantData(data);
+
+        if (!data.paymentInfo?.paystackSubaccountCode) {
+          toast.error("Restaurant payment information is missing");
+        }
+      } catch (error) {
+        console.error("Error fetching restaurant data:", error);
+        toast.error("Failed to fetch restaurant data");
+      }
+    };
+
+    fetchRestaurantData();
+  }, [packs[0]?.restaurantId]);
+
   const handleWalletPayment = async () => {
-    if (!user || !wallet) return;
+    if (!user || !user.email) {
+      toast.error("Please log in to continue");
+      return;
+    }
+
+    if (!currentAddress.address) {
+      toast.error("Please enter a delivery address");
+      return;
+    }
+
+    if (!wallet) {
+      toast.error("Wallet not found");
+      return;
+    }
 
     try {
       setProcessing(true);
@@ -551,94 +637,116 @@ export default function Cart() {
         return;
       }
 
-      // Create order first
+      // Fetch and validate restaurant data
+      let currentRestaurantData = restaurantData;
+      if (!currentRestaurantData) {
+        const restaurantDoc = await getDoc(
+          doc(db, "restaurants", packs[0].restaurantId)
+        );
+        if (!restaurantDoc.exists()) throw new Error("Restaurant not found");
+        currentRestaurantData = restaurantDoc.data() as RestaurantData;
+        if (!currentRestaurantData.paymentInfo?.paystackSubaccountCode) {
+          throw new Error("Restaurant payment information is missing");
+        }
+        setRestaurantData(currentRestaurantData);
+      }
+
+      // Check rider availability
+      await checkRiderAvailability();
+
+      // Create order
       const newOrder = {
         customerId: user.uid,
         restaurantId: packs[0].restaurantId,
-        packs: packs.map((pack) => ({
-          id: pack.id,
-          restaurantName: pack.restaurantName,
-          items: pack.items.map((item) => ({
-            id: item.id,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            specialInstructions: item.specialInstructions || "",
-          })),
-        })),
         customerName:
           userData?.firstName || userData?.lastName
             ? `${userData?.firstName || ""} ${userData?.lastName || ""}`
             : "Anonymous",
         customerPhone: userData?.phone || "",
+        customerEmail: user.email || "",
+        customerAddress: currentAddress.address,
+        items: packs.flatMap((pack) => pack.items),
+        total: calculateTotal(),
+        subtotal: calculateSubtotal(),
+        deliveryFee: calculateDeliveryFee(),
+        serviceFee: calculateServiceFee(),
+        status: "pending" as OrderStatus,
+        paymentMethod: "wallet" as PaymentMethod,
+        paymentStatus: "pending" as "pending" | "paid" | "failed",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         deliveryAddress: {
           address: currentAddress.address,
           additionalInstructions: currentAddress.additionalInstructions || "",
         },
-        total,
-        subtotal: calculateSubtotal(),
-        deliveryFee: calculateDeliveryFee(),
-        serviceFee: calculateServiceFee(),
+        restaurantName: packs[0].restaurantName,
         deliveryConfirmationCode: generateDeliveryCode(),
-        paymentMethod: "wallet",
-        paymentStatus: "completed",
-        riderId: null,
-        assignedAt: null,
+        restaurantPaymentInfo: {
+          paystackSubaccountCode:
+            currentRestaurantData.paymentInfo.paystackSubaccountCode,
+        },
       };
 
-      const orderId = await orderService.createOrder(user.uid, newOrder);
+      // Create order and process wallet payment in a try-catch block
+      const orderId = await orderService.createOrder(newOrder);
 
-      // Deduct from wallet after order creation
-      const newBalance = wallet.balance - total;
-      await updateDoc(doc(db, "wallets", user.uid), {
-        balance: newBalance,
-        updatedAt: serverTimestamp(),
-      });
-
-      // Add rider assignment after order creation
       try {
-        await riderAssignmentService.assignRiderToOrder(orderId);
+        // Process wallet payment
+        await walletService.payWithWallet(user.uid, total, orderId);
+
+        // Update order payment status to paid, but keep order status as pending
+        await orderService.updateOrderPaymentStatus(orderId, true);
+
+        // Refresh wallet balance
+        const updatedWallet = await walletService.getWallet(user.uid);
+        setWallet(updatedWallet);
+
+        clearCart();
+
+        // Show confirmation modal with delivery code
+        const confirmedOrderData = {
+          ...newOrder,
+          id: orderId,
+          customerAddress: currentAddress.address,
+          items: packs.flatMap((pack) => pack.items),
+          status: "pending", // Keep status as pending until restaurant accepts
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          restaurantName: packs[0].restaurantName,
+          packs: packs.map((pack) => ({
+            ...pack,
+            restaurantId: pack.restaurantId,
+            restaurantAddress: "",
+          })),
+        } as unknown as Order;
+
+        setConfirmedOrder(confirmedOrderData);
+        setShowConfirmationModal(true);
+
+        // Wait 10 seconds then navigate to orders page
+        setTimeout(() => {
+          setShowConfirmationModal(false);
+          navigate("/orders", {
+            state: {
+              showConfirmation: true,
+              order: confirmedOrderData,
+            },
+          });
+        }, 100);
+
+        toast.success(
+          "Order placed successfully! Waiting for restaurant confirmation."
+        );
       } catch (error) {
-        console.error("Failed to assign rider:", error);
+        // If wallet payment fails, update order status to failed
+        await orderService.updateOrderStatus(orderId, "cancelled");
+        throw error;
       }
-
-      clearCart();
-
-      // Show confirmation modal with delivery code
-      const confirmedOrderData = {
-        ...newOrder,
-        id: orderId,
-        customerAddress: currentAddress.address,
-        items: packs.flatMap((pack) => pack.items),
-        status: "pending",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        restaurantName: packs[0].restaurantName,
-        packs: packs.map((pack) => ({
-          ...pack,
-          restaurantId: pack.restaurantId,
-          restaurantAddress: "",
-        })),
-      } as unknown as Order;
-
-      setConfirmedOrder(confirmedOrderData);
-      setShowConfirmationModal(true);
-
-      // Wait 10 seconds then navigate to orders page
-      setTimeout(() => {
-        setShowConfirmationModal(false);
-        navigate("/orders", {
-          state: {
-            showConfirmation: true,
-            order: confirmedOrderData,
-          },
-        });
-      }, 100);
-
-      toast.success("Order placed successfully!");
     } catch (error) {
       console.error("Error processing wallet payment:", error);
-      toast.error("Failed to process payment");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to process payment"
+      );
     } finally {
       setProcessing(false);
     }
@@ -799,10 +907,10 @@ export default function Cart() {
               ) : (
                 <button
                   onClick={handlePayment}
-                  disabled={packs.length === 0 || isInitializing}
-                  className="w-full py-3 rounded-lg border border-black transition-colors bg-primary text-zinc-900 hover:bg-primary/90 disabled:opacity-50"
+                  disabled={isProcessing}
+                  className="w-full bg-black text-white py-2 px-4 rounded-lg hover:bg-gray-800 disabled:opacity-50"
                 >
-                  {isInitializing ? "Processing..." : "Proceed to Payment"}
+                  {isProcessing ? "Processing..." : "Proceed to Payment"}
                 </button>
               )}
             </div>

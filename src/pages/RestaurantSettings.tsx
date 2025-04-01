@@ -109,7 +109,8 @@ export default function RestaurantSettings() {
           <div className="mb-6">
             <SubaccountBalance
               subaccountCode={restaurantData.paymentInfo.paystackSubaccountCode}
-              autoRefreshInterval={300000}
+              userType="restaurant"
+              autoRefreshInterval={600000}
             />
           </div>
         )}

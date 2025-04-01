@@ -1,286 +1,204 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import { db, auth } from '../../firebase/config';
-import toast from 'react-hot-toast';
-import { User, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { testNotification } from '../../utils/testNotification';
+import { useState, useEffect } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import { firestoreService } from "../../services/firestoreService";
+import toast from "react-hot-toast";
+import {
+  User,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+} from "firebase/auth";
+import { testNotification } from "../../utils/testNotification";
 
 type CustomUser = User & {
   firstName?: string;
   lastName?: string;
 };
 
+interface AdminSettings {
+  maintenanceMode: boolean;
+  allowNewRegistrations: boolean;
+  minimumAppVersion: string;
+  maxOrdersPerDay: number;
+  commissionRate: number;
+  supportEmail: string;
+  supportPhone: string;
+}
+
 export default function AdminSettings() {
-  const { user } = useAuth() as { user: CustomUser | null };
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    firstName: user?.firstName || '',
-    lastName: user?.lastName || '',
-    email: user?.email || '',
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
+  const { user } = useAuth();
+  const [settings, setSettings] = useState<AdminSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      if (!user?.uid) return;
-      
+    const fetchSettings = async () => {
       try {
-        const userRef = doc(db, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
-        
-        if (userSnap.exists()) {
-          const userData = userSnap.data();
-          setFormData(prev => ({
-            ...prev,
-            firstName: userData.firstName || '',
-            lastName: userData.lastName || '',
-            email: user.email || ''
-          }));
-        }
+        const data = await firestoreService.getDocument(
+          "admin/settings",
+          "general"
+        );
+        setSettings(data as AdminSettings);
       } catch (error) {
-        console.error('Error fetching user data:', error);
-        toast.error('Failed to load user data');
+        console.error("Error fetching settings:", error);
+        toast.error("Failed to load settings");
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchUserData();
-  }, [user?.uid, user?.email]);
+    fetchSettings();
+  }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleProfileUpdate = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.uid) return;
+    if (!settings) return;
 
+    setSaving(true);
     try {
-      setLoading(true);
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        updatedAt: new Date().toISOString()
+      await firestoreService.updateDocument("admin/settings", "general", {
+        ...settings,
+        updatedAt: new Date().toISOString(),
+        updatedBy: user?.uid,
       });
-      toast.success('Profile updated successfully');
+      toast.success("Settings updated successfully");
     } catch (error) {
-      console.error('Error updating profile:', error);
-      toast.error('Failed to update profile');
+      console.error("Error updating settings:", error);
+      toast.error("Failed to update settings");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const handlePasswordUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
+  if (loading) {
+    return <div>Loading...</div>;
+  }
 
-    setLoading(true);
-    try {
-      // Validate passwords match
-      if (formData.newPassword !== formData.confirmPassword) {
-        throw new Error('New passwords do not match');
-      }
-
-      // Get current user from auth
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        throw new Error('No authenticated user found');
-      }
-
-      // Reauthenticate user with current password
-      const credential = EmailAuthProvider.credential(
-        currentUser.email!,
-        formData.currentPassword
-      );
-      await reauthenticateWithCredential(currentUser, credential);
-
-      // Update password
-      await updatePassword(currentUser, formData.newPassword);
-
-      // Clear password fields
-      setFormData(prev => ({
-        ...prev,
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      }));
-
-      toast.success('Password updated successfully');
-    } catch (error: unknown) {
-      console.error('Error updating password:', error);
-      if ((error as { code?: string }).code === 'auth/wrong-password') {
-        toast.error('Current password is incorrect');
-      } else if ((error as { code?: string }).code === 'auth/requires-recent-login') {
-        toast.error('Please log out and log back in before changing your password');
-      } else {
-        toast.error('Failed to update password');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (!settings) {
+    return <div>No settings found</div>;
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-8">Admin Settings</h1>
-
-      <div className="space-y-6">
-        {/* Profile Settings */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-medium mb-4">Profile Settings</h2>
-          <form onSubmit={handleProfileUpdate} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  First Name
-                </label>
-                <input
-                  type="text"
-                  name="firstName"
-                  value={formData.firstName}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Last Name
-                </label>
-                <input
-                  type="text"
-                  name="lastName"
-                  value={formData.lastName}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black"
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                value={formData.email}
-                disabled
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-              />
-              <p className="mt-1 text-sm text-gray-500">
-                Email cannot be changed
-              </p>
-            </div>
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 disabled:opacity-50"
-              >
-                {loading ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          </form>
+      <h1 className="text-2xl font-bold mb-6">Admin Settings</h1>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Maintenance Mode
+          </label>
+          <input
+            type="checkbox"
+            checked={settings.maintenanceMode}
+            onChange={(e) =>
+              setSettings({ ...settings, maintenanceMode: e.target.checked })
+            }
+            className="mt-1"
+          />
         </div>
 
-        {/* Notification Settings */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-medium mb-4">Notification Settings</h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Push Notifications</h3>
-                <p className="text-sm text-gray-500">
-                  Receive instant notifications for new orders and updates
-                </p>
-              </div>
-              <button
-                onClick={async () => {
-                  try {
-                    if (!user) {
-                      toast.error('User not authenticated');
-                      return;
-                    }
-                    const loading = toast.loading('Setting up notifications...');
-                    await testNotification(user.uid);
-                    toast.dismiss(loading);
-                    toast.success('Test notification sent successfully!');
-                  } catch (error: unknown) {
-                    toast.error((error as Error)?.message || 'Failed to send test notification');
-                    console.error('Notification error:', error);
-                  }
-                }}
-                className="px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800"
-              >
-                Test Notifications
-              </button>
-            </div>
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Allow New Registrations
+          </label>
+          <input
+            type="checkbox"
+            checked={settings.allowNewRegistrations}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                allowNewRegistrations: e.target.checked,
+              })
+            }
+            className="mt-1"
+          />
         </div>
 
-        {/* Security Settings */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-medium mb-4">Security Settings</h2>
-          <form onSubmit={handlePasswordUpdate} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Current Password
-              </label>
-              <input
-                type="password"
-                name="currentPassword"
-                value={formData.currentPassword}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                New Password
-              </label>
-              <input
-                type="password"
-                name="newPassword"
-                value={formData.newPassword}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Confirm New Password
-              </label>
-              <input
-                type="password"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black"
-                required
-              />
-            </div>
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 disabled:opacity-50"
-              >
-                {loading ? 'Updating...' : 'Update Password'}
-              </button>
-            </div>
-          </form>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Minimum App Version
+          </label>
+          <input
+            type="text"
+            value={settings.minimumAppVersion}
+            onChange={(e) =>
+              setSettings({ ...settings, minimumAppVersion: e.target.value })
+            }
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          />
         </div>
-      </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Max Orders Per Day
+          </label>
+          <input
+            type="number"
+            value={settings.maxOrdersPerDay}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                maxOrdersPerDay: parseInt(e.target.value),
+              })
+            }
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Commission Rate (%)
+          </label>
+          <input
+            type="number"
+            value={settings.commissionRate}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                commissionRate: parseFloat(e.target.value),
+              })
+            }
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Support Email
+          </label>
+          <input
+            type="email"
+            value={settings.supportEmail}
+            onChange={(e) =>
+              setSettings({ ...settings, supportEmail: e.target.value })
+            }
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Support Phone
+          </label>
+          <input
+            type="tel"
+            value={settings.supportPhone}
+            onChange={(e) =>
+              setSettings({ ...settings, supportPhone: e.target.value })
+            }
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          />
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={saving}
+            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      </form>
     </div>
   );
-} 
+}

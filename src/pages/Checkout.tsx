@@ -1,13 +1,28 @@
-import  { useState } from "react";
+import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import Input from "../components/Input";
+import { toast } from "react-hot-toast";
 
 export default function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState<"card" | "bank">("card");
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  const total = queryParams.get('total') || 0; // Retrieve total from URL parameters
+  const total = queryParams.get("total") || 0; // Retrieve total from URL parameters
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handlePayment = async () => {
+    setIsProcessing(true);
+    try {
+      // Payment logic here
+      toast.success("Payment processed successfully");
+    } catch (error) {
+      console.error("Error processing payment:", error);
+      toast.error("Failed to process payment");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -73,7 +88,13 @@ export default function Checkout() {
             <span>Total</span>
             <span className="font-bold">₦{total}</span>
           </div>
-          <button className="btn-primary w-full">Proceed to Pay ₦{total}</button>
+          <button
+            onClick={handlePayment}
+            disabled={isProcessing}
+            className="w-full bg-black text-white py-2 px-4 rounded-lg hover:bg-gray-800 disabled:opacity-50"
+          >
+            {isProcessing ? "Processing..." : "Proceed to Payment"}
+          </button>
         </div>
       </main>
     </div>

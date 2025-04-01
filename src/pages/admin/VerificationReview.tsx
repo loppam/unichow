@@ -28,6 +28,7 @@ export default function VerificationReview() {
     "all" | "approved" | "pending" | "rejected"
   >("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     loadVerifications();
@@ -74,6 +75,7 @@ export default function VerificationReview() {
     restaurantId: string,
     isVerified: boolean
   ) => {
+    setIsProcessing(true);
     try {
       await adminVerificationService.updateRestaurantVerificationStatus(
         restaurantId,
@@ -88,6 +90,8 @@ export default function VerificationReview() {
     } catch (err) {
       toast.error("Failed to update verification status");
       console.error(err);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -232,13 +236,16 @@ export default function VerificationReview() {
               !verification.status.isVerified
             )
           }
+          disabled={isProcessing}
           className={`px-4 py-2 rounded-lg ${
             verification.status.isVerified
               ? "bg-red-500 text-white hover:bg-red-600"
               : "bg-green-500 text-white hover:bg-green-600"
           }`}
         >
-          {verification.status.isVerified
+          {isProcessing
+            ? "Processing..."
+            : verification.status.isVerified
             ? "Revoke Verification"
             : "Verify Restaurant"}
         </button>

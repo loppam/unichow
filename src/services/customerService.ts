@@ -1,121 +1,95 @@
-import { db } from "../firebase/config";
-import {
-  collection,
-  doc,
-  setDoc,
-  updateDoc,
-  getDoc,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  deleteDoc,
-} from "firebase/firestore";
+import { firestoreService } from "./firestoreService";
 import { CustomerProfile } from "../types/customer";
 import { Review } from "../types/review";
 import { Address } from "../types/order";
 
 export const customerService = {
   async updateProfile(customerId: string, data: Partial<CustomerProfile>) {
-    const customerRef = doc(db, "customers", customerId);
-    await updateDoc(customerRef, data);
+    await firestoreService.updateDocument("customers", customerId, data);
   },
 
-  async getOrderHistory(customerId: string) {
-    const ordersRef = collection(db, "orders");
-    const q = query(ordersRef, where("customerId", "==", customerId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  async addFavoriteRestaurant(customerId: string, restaurantId: string) {
+    await firestoreService.createDocument(`customers/${customerId}/favorites`, {
+      addedAt: new Date().toISOString(),
+    });
   },
 
-  async toggleFavorite(customerId: string, restaurantId: string) {
-    const favRef = doc(db, `customers/${customerId}/favorites/${restaurantId}`);
-    const favDoc = await getDoc(favRef);
-
-    if (favDoc.exists()) {
-      await deleteDoc(favRef);
-    } else {
-      await setDoc(favRef, { addedAt: new Date().toISOString() });
-    }
+  async removeFavoriteRestaurant(customerId: string, restaurantId: string) {
+    await firestoreService.deleteDocument(
+      `customers/${customerId}/favorites`,
+      restaurantId
+    );
   },
 
-  async addReview(restaurantId: string, customerId: string, review: Review) {
-    const reviewRef = collection(db, `restaurants/${restaurantId}/reviews`);
-    await addDoc(reviewRef, {
-      ...review,
-      customerId,
-      createdAt: new Date().toISOString(),
+  async getFavoriteRestaurants(customerId: string) {
+    return await firestoreService.getCollection(
+      `customers/${customerId}/favorites`
+    );
+  },
+
+  async addReview(customerId: string, restaurantId: string, review: Review) {
+    await firestoreService.createDocument(
+      `restaurants/${restaurantId}/reviews`,
+      {
+        ...review,
+        customerId,
+        createdAt: new Date().toISOString(),
+      }
+    );
+  },
+
+  async updateAddress(customerId: string, address: Address) {
+    await firestoreService.updateDocument("customers", customerId, {
+      address,
+      updatedAt: new Date().toISOString(),
     });
   },
 
   async getSavedAddresses(customerId: string): Promise<Address[]> {
-    try {
-      const docRef = doc(db, "customers", customerId);
-      const docSnap = await getDoc(docRef);
-      const data = docSnap.data();
-      return data?.savedAddresses || [];
-    } catch (error) {
-      console.error("Error fetching saved addresses:", error);
-      return [];
-    }
+    const customerDoc = await firestoreService.getDocument(
+      "customers",
+      customerId
+    );
+    return customerDoc?.savedAddresses || [];
   },
 
   async saveAddress(customerId: string, address: Address): Promise<void> {
-    try {
-      const docRef = doc(db, "customers", customerId);
-      const docSnap = await getDoc(docRef);
+    const customerDoc = await firestoreService.getDocument(
+      "customers",
+      customerId
+    );
+    const savedAddresses = customerDoc?.savedAddresses || [];
 
-      if (!docSnap.exists()) {
-        // Create the customer document if it doesn't exist
-        await setDoc(docRef, {
-          savedAddresses: [{ ...address, id: Date.now().toString() }],
-        });
-      } else {
-        const currentData = docSnap.data();
-        const currentAddresses = currentData?.savedAddresses || [];
-
-        await updateDoc(docRef, {
-          savedAddresses: [
-            ...currentAddresses,
-            { ...address, id: Date.now().toString() },
-          ],
-        });
-      }
-    } catch (error) {
-      console.error("Error saving address:", error);
-      throw new Error("Failed to save address");
-    }
+    await firestoreService.updateDocument("customers", customerId, {
+      savedAddresses: [...savedAddresses, address],
+      updatedAt: new Date().toISOString(),
+    });
   },
 
-  async getInitialAddress(userId: string): Promise<Address | null> {
-    try {
-      const userDoc = await getDoc(doc(db, "users", userId));
-      const userData = userDoc.data();
-
-      if (userData?.address) {
-        return {
-          address: userData.address,
-          additionalInstructions: "",
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error("Error fetching initial address:", error);
-      return null;
-    }
+  async getInitialAddress(customerId: string): Promise<Address | null> {
+    const addresses = await this.getSavedAddresses(customerId);
+    return addresses[0] || null;
   },
 
-  async deleteAddress(userId: string, addressToDelete: Address): Promise<void> {
-    const userRef = doc(db, "customers", userId);
-    const userDoc = await getDoc(userRef);
+  async deleteAddress(
+    customerId: string,
+    addressToDelete: Address
+  ): Promise<void> {
+    const customerDoc = await firestoreService.getDocument(
+      "customers",
+      customerId
+    );
+    const savedAddresses = customerDoc?.savedAddresses || [];
 
-    if (userDoc.exists()) {
-      const savedAddresses = userDoc.data().savedAddresses || [];
-      const updatedAddresses = savedAddresses.filter(
+    if (!savedAddresses || !Array.isArray(savedAddresses)) {
+      return;
+    }
+
+    await firestoreService.updateDocument("customers", customerId, {
+      savedAddresses: savedAddresses.filter(
         (addr: Address) => addr.address !== addressToDelete.address
-      );
-
-      await updateDoc(userRef, { savedAddresses: updatedAddresses });
-    }
+      ),
+      updatedAt: new Date().toISOString(),
+    });
   },
 };

@@ -22,8 +22,11 @@ export default function RestaurantNavigation() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t pb-safe">
-      <div className="max-w-md mx-auto flex justify-between px-4 md:px-6">
+    <nav
+      className="fixed bottom-0 left-0 right-0 bg-white border-t"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <div className="max-w-md mx-auto flex justify-between px-4 md:px-6 h-14">
         {navItems.map(({ path, icon: Icon, label }) => (
           <Link
             key={path}

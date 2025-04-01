@@ -83,11 +83,29 @@ export default function RiderPaymentSetup() {
         } as RiderPaymentInfo);
       } else {
         // Create new subaccount
-        await paymentService.createRiderSubaccount(user!.uid, {
-          ...formData,
+        const riderDoc = await getDoc(doc(db, "riders", user!.uid));
+        const riderData = riderDoc.data();
+
+        const subaccountResponse = await paymentService.createRiderSubaccount(
+          user!.uid,
+          {
+            name: riderData?.name || riderData?.fullName || "Rider",
+            email: user!.email || "",
+            phone: riderData?.phone || riderData?.phoneNumber || "",
+            bankCode: formData.bankName,
+            accountNumber: formData.accountNumber!,
+            accountName: verifiedAccount.account_name,
+          }
+        );
+
+        // Save payment info to Firestore
+        await paymentService.updateRiderSubaccount(user!.uid, {
+          bankName: formData.bankName!,
+          accountNumber: formData.accountNumber!,
           accountName: verifiedAccount.account_name,
           isVerified: true,
           lastUpdated: new Date().toISOString(),
+          paystackSubaccountCode: subaccountResponse.subaccount_code,
           settlementSchedule: formData.settlementSchedule || "weekly",
         } as RiderPaymentInfo);
       }
@@ -114,29 +132,17 @@ export default function RiderPaymentSetup() {
   if (existingPaymentInfo?.isVerified) {
     return (
       <div className="bg-white rounded-lg shadow-sm p-6">
-        {existingPaymentInfo?.paystackSubaccountCode && (
-          <div className="mt-6">
-            <SubaccountBalance
-              subaccountCode={existingPaymentInfo.paystackSubaccountCode}
-              autoRefreshInterval={300000}
-            />
-          </div>
-        )}
-        <div className="flex justify-between items-center py-2">
-          <span className="text-gray-600">Last Updated</span>
-          <span className="text-sm text-gray-500">
-            {new Date(existingPaymentInfo.lastUpdated).toLocaleDateString()}
-          </span>
-        </div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Payment Information</h2>
-          <button
-            onClick={() => setExistingPaymentInfo(null)}
-            className="text-sm px-3 py-1 text-gray-600 hover:text-gray-900 border rounded-lg hover:bg-gray-50"
-          >
-            Edit
-          </button>
         </div>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <p className="text-blue-800 text-sm">
+            Your payment information is locked for security reasons. To make any
+            changes, please contact our support team.
+          </p>
+        </div>
+
         <div className="space-y-3">
           <div className="flex justify-between items-center py-2 border-b">
             <span className="text-gray-600">Bank Name</span>
@@ -160,6 +166,12 @@ export default function RiderPaymentSetup() {
             <span className="text-gray-600">Settlement Schedule</span>
             <span className="font-medium capitalize">
               {existingPaymentInfo.settlementSchedule}
+            </span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b">
+            <span className="text-gray-600">Last Updated</span>
+            <span className="text-sm text-gray-500">
+              {new Date(existingPaymentInfo.lastUpdated).toLocaleDateString()}
             </span>
           </div>
         </div>

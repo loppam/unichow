@@ -10,6 +10,7 @@ import { db } from "../firebase/config";
 import { toast } from "react-hot-toast";
 import { paymentService } from "../services/paymentService";
 import { Timestamp } from "firebase/firestore";
+import { firestoreService } from "../services/firestoreService";
 
 export default function RiderOrders() {
   const { user } = useAuth();
@@ -19,26 +20,21 @@ export default function RiderOrders() {
   const [confirmationCode, setConfirmationCode] = useState("");
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     if (!user) return;
 
-    let unsubscribe: () => void;
-
-    orderService
-      .subscribeToRiderOrders(user.uid, (updatedOrders) => {
+    // Subscribe to real-time order updates
+    const unsubscribe = firestoreService.subscribeToRiderOrders(
+      user.uid,
+      (updatedOrders) => {
         setOrders(updatedOrders);
         setLoading(false);
-      })
-      .then((unsub) => {
-        unsubscribe = unsub;
-      });
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
       }
-    };
+    );
+
+    return () => unsubscribe();
   }, [user]);
 
   const getStatusColor = (status: Order["status"]) => {
@@ -75,6 +71,7 @@ export default function RiderOrders() {
     orderId: string,
     newStatus: Order["status"]
   ) => {
+    setIsProcessing(true);
     try {
       if (!user) return;
 
@@ -114,6 +111,8 @@ export default function RiderOrders() {
     } catch (error) {
       console.error("Error updating order status:", error);
       toast.error("Failed to update order status");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -274,9 +273,10 @@ export default function RiderOrders() {
                   {order.status === "ready" && order.riderId === user?.uid && (
                     <button
                       onClick={() => handleStatusUpdate(order.id, "picked_up")}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm"
+                      disabled={isProcessing}
+                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
                     >
-                      Pick Up Order
+                      {isProcessing ? "Updating..." : "Mark as Picked Up"}
                     </button>
                   )}
                   {["accepted", "preparing"].includes(order.status) &&

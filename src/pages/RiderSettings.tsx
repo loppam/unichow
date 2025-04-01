@@ -10,6 +10,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import SubaccountBalance from "../components/common/SubaccountBalance";
 
 const LoadingSpinner = () => (
   <RiderLayout>
@@ -191,10 +192,20 @@ export default function RiderSettings() {
 
   return (
     <RiderLayout>
-      <div className="p-4 max-w-2xl mx-auto">
+      <div className="p-4 max-w-2xl mx-auto mb-16">
         <h1 className="text-2xl font-bold mb-6">Settings</h1>
 
         <div className="space-y-6">
+          {rider?.paymentInfo?.paystackSubaccountCode && (
+            <div className="mb-6">
+              <SubaccountBalance
+                subaccountCode={rider.paymentInfo.paystackSubaccountCode}
+                userType="rider"
+                autoRefreshInterval={600000}
+              />
+            </div>
+          )}
+
           <PaymentSetup />
 
           <FormSection title="Profile Information">

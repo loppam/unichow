@@ -165,7 +165,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState("");
   const [deliverySettings, setDeliverySettings] =
     useState<DeliverySettings | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -228,14 +228,14 @@ export default function AdminDashboard() {
     if (!deliverySettings) return;
 
     try {
-      setSaving(true);
+      setIsProcessing(true);
       await adminSettingsService.updateDeliverySettings(deliverySettings);
       toast.success("Delivery settings updated successfully");
     } catch (error) {
       console.error("Error updating delivery settings:", error);
       toast.error("Failed to update delivery settings");
     } finally {
-      setSaving(false);
+      setIsProcessing(false);
     }
   };
 
@@ -389,10 +389,10 @@ export default function AdminDashboard() {
             <div className="flex justify-end">
               <button
                 type="submit"
-                disabled={saving}
-                className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-400"
+                disabled={isProcessing}
+                className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
               >
-                {saving ? "Saving..." : "Save Changes"}
+                {isProcessing ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </form>

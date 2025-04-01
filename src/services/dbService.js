@@ -1,57 +1,33 @@
-import { 
-  collection,
-  doc,
-  getDocs,
-  addDoc,
-  updateDoc,
-  query,
-  where
-} from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { firestoreService } from "./firestoreService";
+import { where } from "firebase/firestore";
 
 export const dbService = {
   // Meals
   async getAllMeals() {
-    const mealsRef = collection(db, 'meals');
-    const snapshot = await getDocs(mealsRef);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    return await firestoreService.getCollection("meals");
   },
 
   async updateMealStock(mealId, inStock) {
-    const mealRef = doc(db, 'meals', mealId);
-    await updateDoc(mealRef, { inStock });
+    await firestoreService.updateDocument("meals", mealId, { inStock });
   },
 
   // Sides
   async getMealSides(mealId) {
-    const sidesRef = collection(db, 'sides');
-    const q = query(sidesRef, where("mealId", "==", mealId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    return await firestoreService.getCollection("sides", [
+      where("mealId", "==", mealId),
+    ]);
   },
 
   // Orders
   async createOrder(orderData) {
-    const ordersRef = collection(db, 'orders');
-    return await addDoc(ordersRef, {
+    return await firestoreService.createDocument("orders", {
       ...orderData,
       createdAt: new Date(),
-      status: 'pending'
+      status: "pending",
     });
   },
 
   async getOrders() {
-    const ordersRef = collection(db, 'orders');
-    const snapshot = await getDocs(ordersRef);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-  }
-}; 
+    return await firestoreService.getCollection("orders");
+  },
+};

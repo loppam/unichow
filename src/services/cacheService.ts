@@ -1,32 +1,50 @@
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const cache = new Map<string, { data: any; timestamp: number }>();
+interface CacheItem<T> {
+  data: T;
+  timestamp: number;
+}
 
-export const cacheService = {
-  async get<T>(key: string): Promise<T | null> {
-    const cached = cache.get(key);
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      return cached.data as T;
-    }
-    return null;
-  },
+class CacheService {
+  private static instance: CacheService;
+  private cache: Map<string, CacheItem<any>>;
+  private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
 
-  set(key: string, data: any): void {
-    cache.set(key, {
-      data,
-      timestamp: Date.now()
-    });
-  },
-
-  invalidate(key: string): void {
-    cache.delete(key);
-  },
-
-  invalidatePattern(pattern: string): void {
-    const regex = new RegExp(pattern);
-    for (const key of cache.keys()) {
-      if (regex.test(key)) {
-        cache.delete(key);
-      }
-    }
+  private constructor() {
+    this.cache = new Map();
   }
-}; 
+
+  static getInstance(): CacheService {
+    if (!CacheService.instance) {
+      CacheService.instance = new CacheService();
+    }
+    return CacheService.instance;
+  }
+
+  set<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): void {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now() + ttl,
+    });
+  }
+
+  get<T>(key: string): T | null {
+    const item = this.cache.get(key);
+    if (!item) return null;
+
+    if (Date.now() > item.timestamp) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return item.data as T;
+  }
+
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+export const cacheService = CacheService.getInstance();

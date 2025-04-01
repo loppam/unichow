@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useCart } from "../contexts/CartContext";
 import { OrderStatus, Order } from "../types/order";
+import { firestoreService } from "../services/firestoreService";
+import { toast } from "react-hot-toast";
 
 import { ShoppingCart, Clock, CheckCircle, Trash2 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -22,22 +24,23 @@ export default function UserOrders() {
   );
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) return;
 
-    console.log("Subscribing to user orders for:", user.uid);
-    const unsubscribe = realtimeService.subscribeToUserOrders(
+    // Subscribe to real-time order updates
+    const unsubscribe = firestoreService.subscribeToUserOrders(
       user.uid,
       (updatedOrders) => {
-        console.log("Received orders:", updatedOrders);
         setOrders(updatedOrders);
         setLoading(false);
       }
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid]);
 
   useEffect(() => {
     if (location.state?.showConfirmation && location.state?.order) {
@@ -97,6 +100,14 @@ export default function UserOrders() {
       currency: "NGN",
     }).format(amount);
   };
+
+  if (loading && orders.length === 0) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <>

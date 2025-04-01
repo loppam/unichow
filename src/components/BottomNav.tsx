@@ -7,8 +7,11 @@ export default function BottomNav() {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t pb-safe">
-      <div className="max-w-md mx-auto flex justify-between items-center px-6 py-2 h-[60px]">
+    <nav
+      className="fixed bottom-0 left-0 right-0 bg-white border-t"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <div className="max-w-md mx-auto flex justify-between items-center px-6 py-2 h-14">
         <Link
           to="/home"
           className={`flex flex-col items-center flex-1 min-w-0 ${
